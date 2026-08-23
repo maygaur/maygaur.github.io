@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>NemoTest</title>
+<meta name="theme-color" content="#7c3aed">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='20' fill='%237c3aed'/%3E%3Ctext x='50' y='68' font-size='55' text-anchor='middle' fill='white'%3E%F0%9F%93%9D%3C/text%3E%3C/svg%3E">
+<style>
+  :root{
+    --bg:#f5f3ff; --card:#ffffff; --text:#1e1b2e; --muted:#6b6480;
+    --accent:#7c3aed; --accent-dark:#6d28d9; --good:#16a34a; --goodbg:#dcfce7;
+    --bad:#dc2626; --badbg:#fee2e2; --border:#e9e5f9;
+    --shadow:0 1px 3px rgba(60,40,110,.08), 0 8px 24px rgba(60,40,110,.06);
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#150f24; --card:#1e1733; --text:#ede9fe; --muted:#a49cc4;
+      --accent:#a78bfa; --accent-dark:#8b5cf6; --good:#4ade80; --goodbg:#123321;
+      --bad:#f87171; --badbg:#3a1414; --border:#332a54;
+      --shadow:0 1px 3px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.25);
+    }
+  }
+  *{box-sizing:border-box;}
+  body{margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg); color:var(--text); padding-bottom:40px;}
+  .wrap{max-width:560px; margin:0 auto; padding:16px;}
+  header{padding:20px 4px 10px; text-align:center;}
+  header h1{font-size:22px; margin:0 0 2px;}
+  header .sub{color:var(--muted); font-size:13px;}
+  .card{background:var(--card); border:1px solid var(--border); border-radius:16px;
+    padding:18px; margin-bottom:14px; box-shadow:var(--shadow);}
+  .qnum{font-size:12px; font-weight:700; color:var(--accent); text-transform:uppercase; letter-spacing:.04em; margin-bottom:6px;}
+  .qtext{font-size:16px; font-weight:600; margin-bottom:12px; line-height:1.4;}
+  .ans-row{display:flex; gap:8px;}
+  .ans-row input{flex:1; padding:12px; border-radius:10px; border:1px solid var(--border);
+    background:var(--bg); color:var(--text); font-size:15px;}
+  .ans-row button{padding:12px 18px; border-radius:10px; border:none; background:var(--accent);
+    color:#fff; font-weight:700; font-size:14px; cursor:pointer;}
+  .ans-row button:disabled{opacity:.5; cursor:default;}
+  .mic-btn{padding:12px 14px !important; background:var(--card) !important; color:var(--accent) !important;
+    border:1px solid var(--border) !important; font-size:16px !important; line-height:1;}
+  .mic-btn.listening{background:var(--bad) !important; color:#fff !important; border-color:var(--bad) !important;
+    animation:pulse 1s infinite;}
+  @keyframes pulse{0%,100%{opacity:1;} 50%{opacity:.55;}}
+  .feedback{margin-top:10px; padding:10px 12px; border-radius:10px; font-size:13.5px; font-weight:600; display:none;}
+  .feedback.correct{display:block; background:var(--goodbg); color:var(--good);}
+  .feedback.incorrect{display:block; background:var(--badbg); color:var(--bad);}
+  .score-card{position:sticky; top:12px; text-align:center; z-index:5;}
+  .score-big{font-size:32px; font-weight:800; color:var(--accent);}
+  .score-label{color:var(--muted); font-size:12.5px;}
+  .empty{text-align:center; color:var(--muted); padding:30px 10px; font-size:14px;}
+  footer{text-align:center; font-size:11px; color:var(--muted); margin-top:20px;}
+  a.admin-link{color:var(--muted); text-decoration:underline;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>📝 NemoTest</h1>
+    <div class="sub">Answer each question, hit Check, see how you did</div>
+  </header>
+
+  <div class="card score-card" id="scoreCard" style="display:none;">
+    <div class="score-big" id="scoreBig">0 / 0</div>
+    <div class="score-label">questions correct so far</div>
+  </div>
+
+  <div id="quizContent">
+    <div class="card empty">Loading questions…</div>
+  </div>
+
+  <footer><a class="admin-link" href="admin.html">admin</a></footer>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getFirestore, collection, getDocs, query, orderBy } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyDy6Zu4weC0IsDCrQ20FYC-OOxnXw_21vQ",
+  authDomain: "water-intake-beca8.firebaseapp.com",
+  projectId: "water-intake-beca8",
+  storageBucket: "water-intake-beca8.firebasestorage.app",
+  messagingSenderId: "1060774876551",
+  appId: "1:1060774876551:web:1eae13fb2aa3d2e028af22"
+};
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+
+function normalize(s){
+  return String(s || "").trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+// ---------- voice input (Web Speech API) ----------
+const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+function attachMic(inputEl, mountEl){
+  if (!SpeechRec || !mountEl) return; // not supported (e.g. iOS Safari) — no button shown
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "mic-btn";
+  btn.textContent = "🎤";
+  btn.title = "Speak your answer";
+  let recognizing = false;
+  let recognition;
+  btn.onclick = (e) => {
+    e.preventDefault();
+    if (recognizing){ recognition.stop(); return; }
+    recognition = new SpeechRec();
+    recognition.lang = "en-US";
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+    recognition.onstart = () => { recognizing = true; btn.classList.add("listening"); btn.textContent = "●"; };
+    recognition.onend = () => { recognizing = false; btn.classList.remove("listening"); btn.textContent = "🎤"; };
+    recognition.onerror = () => { recognizing = false; btn.classList.remove("listening"); btn.textContent = "🎤"; };
+    recognition.onresult = (ev) => {
+      const transcript = ev.results[0][0].transcript;
+      inputEl.value = (inputEl.value.trim() ? inputEl.value.trim() + " " : "") + transcript;
+      inputEl.focus();
+    };
+    recognition.start();
+  };
+  mountEl.appendChild(btn);
+}
+
+const contentEl = document.getElementById("quizContent");
+const scoreCardEl = document.getElementById("scoreCard");
+const scoreBigEl = document.getElementById("scoreBig");
+
+let results = {}; // qid -> true/false
+
+function updateScore(){
+  const total = Object.keys(results).length;
+  const correct = Object.values(results).filter(Boolean).length;
+  scoreBigEl.textContent = `${correct} / ${total}`;
+}
+
+async function loadQuestions(){
+  let snap;
+  try {
+    snap = await getDocs(query(collection(db, "nemo_questions"), orderBy("createdAt", "asc")));
+  } catch (e) {
+    // orderBy can fail if field missing on some docs; fall back to unordered
+    snap = await getDocs(collection(db, "nemo_questions"));
+  }
+  const questions = [];
+  snap.forEach(d => questions.push({ id: d.id, ...d.data() }));
+
+  if (questions.length === 0){
+    contentEl.innerHTML = `<div class="card empty">No questions yet. Ask an admin to add some on the <a class="admin-link" href="admin.html">admin page</a>.</div>`;
+    return;
+  }
+
+  scoreCardEl.style.display = "block";
+  contentEl.innerHTML = questions.map((q, i) => `
+    <div class="card" data-qid="${q.id}">
+      <div class="qnum">Question ${i+1} of ${questions.length}</div>
+      <div class="qtext">${escapeHtml(q.question)}</div>
+      <div class="ans-row">
+        <input type="text" placeholder="Your answer" id="ans_${q.id}">
+        <span id="mic_${q.id}"></span>
+        <button id="check_${q.id}">Check</button>
+      </div>
+      <div class="feedback" id="fb_${q.id}"></div>
+    </div>
+  `).join("");
+
+  questions.forEach(q => {
+    const input = document.getElementById(`ans_${q.id}`);
+    const btn = document.getElementById(`check_${q.id}`);
+    const fb = document.getElementById(`fb_${q.id}`);
+    attachMic(input, document.getElementById(`mic_${q.id}`));
+    const submit = () => {
+      if (btn.disabled) return;
+      const isCorrect = normalize(input.value) === normalize(q.answer);
+      results[q.id] = isCorrect;
+      fb.className = "feedback " + (isCorrect ? "correct" : "incorrect");
+      fb.textContent = isCorrect ? "✓ Correct!" : `✗ Not quite — correct answer: ${q.answer}`;
+      input.disabled = true;
+      btn.disabled = true;
+      updateScore();
+    };
+    btn.onclick = submit;
+    input.addEventListener("keydown", e => { if (e.key === "Enter") submit(); });
+  });
+}
+
+function escapeHtml(s){
+  const d = document.createElement("div");
+  d.textContent = String(s || "");
+  return d.innerHTML;
+}
+
+loadQuestions();
+</script>
+</body>
+</html>
