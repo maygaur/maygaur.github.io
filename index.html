@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Family Water Tracker</title>
+<meta name="theme-color" content="#0ea5e9">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Water Tracker">
+<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='20' fill='%230ea5e9'/%3E%3Ctext x='50' y='68' font-size='55' text-anchor='middle' fill='white'%3E%F0%9F%92%A7%3C/text%3E%3C/svg%3E">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='20' fill='%230ea5e9'/%3E%3Ctext x='50' y='68' font-size='55' text-anchor='middle' fill='white'%3E%F0%9F%92%A7%3C/text%3E%3C/svg%3E">
+<style>
+  :root{
+    --bg:#f0f9ff; --card:#ffffff; --text:#0c1b2a; --muted:#5b7285;
+    --accent:#0ea5e9; --accent-dark:#0284c7; --good:#16a34a; --warn:#dc2626;
+    --border:#dbeafe; --gold:#f59e0b; --silver:#94a3b8; --bronze:#b45309;
+    --shadow:0 1px 3px rgba(15,60,90,.08), 0 8px 24px rgba(15,60,90,.06);
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#071726; --card:#0f2438; --text:#e8f2fb; --muted:#8fa9bd;
+      --accent:#38bdf8; --accent-dark:#0ea5e9; --good:#4ade80; --warn:#f87171;
+      --border:#183350; --shadow:0 1px 3px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.25);
+    }
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg); color:var(--text); padding-bottom:40px;
+  }
+  .wrap{max-width:520px; margin:0 auto; padding:16px;}
+  header{padding:20px 4px 8px; text-align:center;}
+  header h1{font-size:22px; margin:0 0 2px; display:flex; align-items:center; justify-content:center; gap:8px;}
+  header .sub{color:var(--muted); font-size:13px;}
+  .card{
+    background:var(--card); border:1px solid var(--border); border-radius:16px;
+    padding:18px; margin-bottom:14px; box-shadow:var(--shadow);
+  }
+  .member-picker{display:flex; gap:8px; margin-bottom:14px;}
+  .member-btn{
+    flex:1; padding:10px 4px; border-radius:12px; border:2px solid var(--border);
+    background:var(--card); color:var(--text); font-size:14px; font-weight:600;
+    cursor:pointer; text-align:center; transition:all .15s;
+  }
+  .member-btn.active{border-color:var(--accent); background:var(--accent); color:#fff;}
+  .quote-card{
+    background:linear-gradient(135deg,var(--accent),var(--accent-dark)); color:#fff;
+    text-align:center; font-style:italic; font-size:14.5px; line-height:1.5;
+  }
+  .quote-card .author{display:block; margin-top:6px; font-style:normal; font-size:12px; opacity:.85;}
+  .today-total{font-size:38px; font-weight:800; text-align:center; margin:2px 0;}
+  .today-goal{text-align:center; color:var(--muted); font-size:13px; margin-bottom:14px;}
+  .progress-bar{height:10px; border-radius:6px; background:var(--border); overflow:hidden; margin-bottom:16px;}
+  .progress-fill{height:100%; background:var(--accent); transition:width .3s;}
+  .quick-buttons{display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-bottom:12px;}
+  .quick-btn{
+    padding:12px 4px; border-radius:10px; border:1px solid var(--border); background:var(--bg);
+    color:var(--text); font-weight:600; font-size:13px; cursor:pointer;
+  }
+  .quick-btn:active{transform:scale(.96);}
+  .manual-row{display:flex; gap:8px; margin-bottom:8px;}
+  .manual-row input{
+    flex:1; padding:12px; border-radius:10px; border:1px solid var(--border);
+    background:var(--bg); color:var(--text); font-size:16px;
+  }
+  .manual-row button{
+    padding:12px 18px; border-radius:10px; border:none; background:var(--accent);
+    color:#fff; font-weight:700; font-size:14px; cursor:pointer;
+  }
+  .reset-link{text-align:center; font-size:12px; color:var(--muted); text-decoration:underline; cursor:pointer; margin-top:4px;}
+  .coach{border-left:4px solid var(--accent); }
+  .coach.lead{border-left-color:var(--good);}
+  .coach.behind{border-left-color:var(--warn);}
+  .coach h3{margin:0 0 6px; font-size:14px; display:flex; align-items:center; gap:6px;}
+  .coach p{margin:0; font-size:13.5px; line-height:1.5; color:var(--text);}
+  .coach .stat-row{display:flex; gap:14px; margin-top:10px; flex-wrap:wrap;}
+  .coach .stat{font-size:12px; color:var(--muted);}
+  .coach .stat b{display:block; font-size:16px; color:var(--text); font-weight:800;}
+  .lb-header{display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;}
+  .lb-header h2{font-size:15px; margin:0;}
+  .lb-week{font-size:11.5px; color:var(--muted);}
+  .winner-banner{
+    background:linear-gradient(135deg,#fbbf24,#f59e0b); color:#3b2a00; border-radius:12px;
+    padding:12px 14px; text-align:center; font-weight:700; font-size:14px; margin-bottom:12px;
+  }
+  .lb-row{
+    display:flex; align-items:center; gap:10px; padding:10px 6px; border-bottom:1px solid var(--border);
+  }
+  .lb-row:last-child{border-bottom:none;}
+  .lb-rank{font-size:18px; width:26px; text-align:center;}
+  .lb-name{flex:1; font-weight:600; font-size:14px;}
+  .lb-name .you{font-size:11px; color:var(--accent); font-weight:700; margin-left:4px;}
+  .lb-bar-wrap{flex:1; max-width:90px; height:6px; background:var(--border); border-radius:4px; overflow:hidden;}
+  .lb-bar{height:100%; background:var(--accent);}
+  .lb-total{font-size:13px; font-weight:700; width:56px; text-align:right;}
+  footer{text-align:center; font-size:11px; color:var(--muted); margin-top:20px;}
+  .status-msg{text-align:center; font-size:12px; color:var(--muted); padding:8px;}
+  .goal-edit{font-size:11.5px; color:var(--accent); text-decoration:underline; cursor:pointer; text-align:center; margin-top:6px;}
+</style>
+</head>
+<body>
+<div class="wrap" id="app">
+  <header>
+    <h1>💧 Family Water Tracker</h1>
+    <div class="sub" id="weekLabel">This week's hydration race</div>
+  </header>
+
+  <div class="member-picker" id="memberPicker"></div>
+
+  <div id="mainContent"></div>
+
+  <footer>Week runs Sunday → Saturday · Built with 💙 for the family</footer>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import {
+  getFirestore, doc, setDoc, getDoc, collection, query, where, getDocs
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyDy6Zu4weC0IsDCrQ20FYC-OOxnXw_21vQ",
+  authDomain: "water-intake-beca8.firebaseapp.com",
+  projectId: "water-intake-beca8",
+  storageBucket: "water-intake-beca8.firebasestorage.app",
+  messagingSenderId: "1060774876551",
+  appId: "1:1060774876551:web:1eae13fb2aa3d2e028af22"
+};
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+
+const MEMBERS = [
+  { id: "mayank", name: "Mayank" },
+  { id: "neetika", name: "Neetika" },
+  { id: "nityank", name: "Nityank" }
+];
+const DEFAULT_GOAL = 3.0;
+
+const QUOTES = [
+  ["Water is the driving force of all nature.", "Leonardo da Vinci"],
+  ["Small daily sips add up to big weekly wins.", "Family Water Tracker"],
+  ["Thirst is often mistaken for hunger — drink up first.", "Wellness proverb"],
+  ["You don't have to see the whole staircase, just drink the next glass.", "adapted, MLK Jr."],
+  ["Discipline is choosing between what you want now and what you want most this week.", "Anonymous"],
+  ["Hydration is self-care that takes ten seconds.", "Family Water Tracker"],
+  ["A river cuts through rock not by power but by persistence — sip by sip.", "adapted proverb"],
+  ["Consistency beats intensity. One more glass, every day.", "Family Water Tracker"],
+  ["Take care of your body, it's the only place you have to live.", "Jim Rohn"],
+  ["Champions are made in the unglamorous daily habits.", "Anonymous"],
+  ["Every glass today is a vote for the leaderboard you want on Sunday.", "Family Water Tracker"],
+  ["The secret of getting ahead is getting started — pour the first glass.", "adapted, Mark Twain"],
+  ["Well hydrated, well motivated.", "Family Water Tracker"],
+  ["Progress, not perfection — log it even if it's not perfect today.", "Anonymous"],
+  ["Your future self is watching this week's leaderboard.", "Family Water Tracker"]
+];
+
+// ---------- date / week helpers (local time) ----------
+function pad(n){ return String(n).padStart(2,"0"); }
+function toDateStr(d){ return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`; }
+function todayStr(){ return toDateStr(new Date()); }
+function startOfWeek(d){ // Sunday
+  const x = new Date(d); x.setHours(0,0,0,0);
+  x.setDate(x.getDate() - x.getDay());
+  return x;
+}
+function addDays(d, n){ const x = new Date(d); x.setDate(x.getDate()+n); return x; }
+function fmtShort(d){ return d.toLocaleDateString(undefined,{month:"short",day:"numeric"}); }
+
+const today = new Date();
+const isSunday = today.getDay() === 0;
+const weekStart = startOfWeek(today);
+const weekEnd = addDays(weekStart, 6);
+const lastWeekStart = addDays(weekStart, -7);
+const lastWeekEnd = addDays(weekStart, -1);
+
+document.getElementById("weekLabel").textContent =
+  `Week of ${fmtShort(weekStart)} – ${fmtShort(weekEnd)}`;
+
+// ---------- routing ----------
+function currentMemberFromHash(){
+  const h = location.hash.replace("#","").replace(/^\//,"").toLowerCase();
+  return MEMBERS.find(m => m.id === h) || null;
+}
+let selected = currentMemberFromHash() || null;
+window.addEventListener("hashchange", () => { selected = currentMemberFromHash(); render(); });
+
+// ---------- data access ----------
+async function fetchWeekEntries(fromStr, toStr){
+  const snap = await getDocs(collection(db, "entries"));
+  const totals = {}; MEMBERS.forEach(m => totals[m.id] = 0);
+  snap.forEach(docSnap => {
+    const e = docSnap.data();
+    if (e.date >= fromStr && e.date <= toStr && totals.hasOwnProperty(e.member)) {
+      totals[e.member] += Number(e.liters) || 0;
+    }
+  });
+  return totals;
+}
+async function fetchTodayFor(memberId){
+  const ref = doc(db, "entries", `${memberId}_${todayStr()}`);
+  const snap = await getDoc(ref);
+  return snap.exists() ? Number(snap.data().liters) || 0 : 0;
+}
+async function fetchGoal(memberId){
+  const ref = doc(db, "goals", memberId);
+  const snap = await getDoc(ref);
+  return snap.exists() && snap.data().dailyGoal ? Number(snap.data().dailyGoal) : DEFAULT_GOAL;
+}
+async function saveGoal(memberId, val){
+  await setDoc(doc(db, "goals", memberId), { dailyGoal: val, member: memberId }, { merge: true });
+}
+async function saveToday(memberId, liters){
+  await setDoc(doc(db, "entries", `${memberId}_${todayStr()}`), {
+    member: memberId, date: todayStr(), liters, updatedAt: Date.now()
+  }, { merge: true });
+}
+
+// ---------- render ----------
+const pickerEl = document.getElementById("memberPicker");
+const mainEl = document.getElementById("mainContent");
+
+function renderPicker(){
+  pickerEl.innerHTML = MEMBERS.map(m =>
+    `<button class="member-btn ${selected && selected.id===m.id ? 'active':''}" data-id="${m.id}">${m.name}</button>`
+  ).join("");
+  pickerEl.querySelectorAll(".member-btn").forEach(btn=>{
+    btn.onclick = () => { location.hash = "/" + btn.dataset.id; };
+  });
+}
+
+function quoteOfTheDay(){
+  const seed = Number(todayStr().replaceAll("-",""));
+  return QUOTES[seed % QUOTES.length];
+}
+
+async function render(){
+  renderPicker();
+  if (!selected){
+    mainEl.innerHTML = `<div class="card status-msg">Pick your name above to log today's water intake and see your stats.</div>`;
+    await renderLeaderboard(null);
+    return;
+  }
+  mainEl.innerHTML = `<div class="card status-msg">Loading ${selected.name}'s data…</div>`;
+
+  const [todayLiters, goal] = await Promise.all([
+    fetchTodayFor(selected.id),
+    fetchGoal(selected.id)
+  ]);
+  const [q, qa] = quoteOfTheDay();
+  const pct = Math.min(100, Math.round((todayLiters/goal)*100));
+
+  mainEl.innerHTML = `
+    <div class="card quote-card">"${q}"<span class="author">— ${qa}</span></div>
+
+    <div class="card">
+      <div class="today-total">${todayLiters.toFixed(2)} L</div>
+      <div class="today-goal">of ${goal.toFixed(1)} L goal today
+        <span class="goal-edit" id="editGoal">(edit goal)</span>
+      </div>
+      <div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div>
+      <div class="quick-buttons">
+        <button class="quick-btn" data-add="0.25">+250ml</button>
+        <button class="quick-btn" data-add="0.5">+500ml</button>
+        <button class="quick-btn" data-add="1">+1L</button>
+        <button class="quick-btn" data-add="1.5">+1.5L</button>
+      </div>
+      <div class="manual-row">
+        <input type="number" id="manualVal" min="0" max="20" step="0.1" placeholder="Set exact total for today (L)">
+        <button id="setBtn">Set</button>
+      </div>
+      <div class="reset-link" id="resetBtn">reset today to 0</div>
+    </div>
+
+    <div id="coachSlot"></div>
+    <div id="lbSlot"></div>
+  `;
+
+  document.getElementById("editGoal").onclick = async () => {
+    const v = prompt(`Daily goal for ${selected.name} (liters):`, goal);
+    const num = parseFloat(v);
+    if (!isNaN(num) && num > 0 && num <= 15){ await saveGoal(selected.id, num); render(); }
+  };
+  mainEl.querySelectorAll("[data-add]").forEach(btn=>{
+    btn.onclick = async () => {
+      const newVal = todayLiters + parseFloat(btn.dataset.add);
+      await saveToday(selected.id, Math.round(newVal*100)/100);
+      render();
+    };
+  });
+  document.getElementById("setBtn").onclick = async () => {
+    const v = parseFloat(document.getElementById("manualVal").value);
+    if (!isNaN(v) && v >= 0 && v <= 20){ await saveToday(selected.id, v); render(); }
+  };
+  document.getElementById("resetBtn").onclick = async () => {
+    await saveToday(selected.id, 0); render();
+  };
+
+  await renderCoach(goal);
+  await renderLeaderboard(selected.id);
+}
+
+async function renderCoach(myGoal){
+  const totals = await fetchWeekEntries(toDateStr(weekStart), todayStr());
+  const ranked = MEMBERS.map(m => ({...m, total: totals[m.id]||0}))
+                         .sort((a,b)=>b.total-a.total);
+  const myEntry = ranked.find(r=>r.id===selected.id);
+  const myRank = ranked.findIndex(r=>r.id===selected.id) + 1;
+  const leader = ranked[0];
+  const daysElapsed = today.getDay() + 1; // Sun=1..Sat=7
+  const daysRemaining = 7 - daysElapsed;
+  const slot = document.getElementById("coachSlot");
+
+  let cls = "coach", title, body, statHtml = "";
+  if (myRank === 1 && ranked.length > 1){
+    const gap = myEntry.total - (ranked[1]?.total || 0);
+    cls += " lead";
+    title = "🥇 You're in the lead!";
+    body = daysRemaining > 0
+      ? `You're ahead by ${gap.toFixed(2)} L. Keep averaging at least ${myGoal.toFixed(1)} L/day for the remaining ${daysRemaining} day${daysRemaining===1?'':'s'} to hold the crown through Saturday.`
+      : `It's the last day — finish strong and the win is yours.`;
+  } else {
+    const gap = Math.max(leader.total - myEntry.total, 0);
+    cls += " behind";
+    title = `📈 Currently #${myRank} — ${gap.toFixed(2)} L behind ${leader.name}`;
+    if (daysRemaining > 0){
+      const perDay = gap / daysRemaining;
+      body = `Drink about ${(myGoal + perDay).toFixed(2)} L/day (your ${myGoal.toFixed(1)} L goal + ${perDay.toFixed(2)} L extra) for the next ${daysRemaining} day${daysRemaining===1?'':'s'} to catch ${leader.name} by Saturday.`;
+    } else {
+      body = gap > 0
+        ? `Today's the last day — drink ${gap.toFixed(2)} L more than ${leader.name} has today to snatch the win.`
+        : `It's neck and neck on the final day — every glass counts!`;
+    }
+  }
+  statHtml = `<div class="stat-row">
+    <div class="stat">This week<b>${myEntry.total.toFixed(2)} L</b></div>
+    <div class="stat">Rank<b>#${myRank} of ${ranked.length}</b></div>
+    <div class="stat">Days left<b>${Math.max(daysRemaining,0)}</b></div>
+  </div>`;
+
+  slot.innerHTML = `<div class="card ${cls}"><h3>${title}</h3><p>${body}</p>${statHtml}</div>`;
+}
+
+async function renderLeaderboard(myId){
+  const totals = await fetchWeekEntries(toDateStr(weekStart), todayStr());
+  const ranked = MEMBERS.map(m => ({...m, total: totals[m.id]||0}))
+                         .sort((a,b)=>b.total-a.total);
+  const maxTotal = Math.max(...ranked.map(r=>r.total), 0.01);
+  const medals = ["🥇","🥈","🥉"];
+
+  let winnerBanner = "";
+  if (isSunday){
+    const lastTotals = await fetchWeekEntries(toDateStr(lastWeekStart), toDateStr(lastWeekEnd));
+    const lastRanked = MEMBERS.map(m => ({...m, total: lastTotals[m.id]||0}))
+                               .sort((a,b)=>b.total-a.total);
+    if (lastRanked[0].total > 0){
+      winnerBanner = `<div class="winner-banner">🏆 Last week's champion: ${lastRanked[0].name} with ${lastRanked[0].total.toFixed(2)} L!</div>`;
+    }
+  }
+
+  const rows = ranked.map((r,i) => `
+    <div class="lb-row">
+      <div class="lb-rank">${medals[i] || (i+1)}</div>
+      <div class="lb-name">${r.name}${myId===r.id ? '<span class="you">YOU</span>':''}</div>
+      <div class="lb-bar-wrap"><div class="lb-bar" style="width:${(r.total/maxTotal)*100}%"></div></div>
+      <div class="lb-total">${r.total.toFixed(2)} L</div>
+    </div>
+  `).join("");
+
+  document.getElementById("lbSlot").innerHTML = `
+    <div class="card">
+      <div class="lb-header"><h2>🏁 Weekly Leaderboard</h2><span class="lb-week">Sun–Sat</span></div>
+      ${winnerBanner}
+      ${rows}
+    </div>
+  `;
+}
+
+render();
+</script>
+</body>
+</html>
