@@ -104,6 +104,11 @@
       <input type="file" id="imgInput" accept="image/*">
       <button id="extractBtn" style="margin-top:10px;">Extract from image</button>
       <div class="status" id="ocrStatus"></div>
+      <div id="rawTextWrap" style="margin-top:14px; display:none;">
+        <label>Raw extracted text</label>
+        <textarea id="rawTextBox" style="min-height:120px;"></textarea>
+        <button class="secondary" id="reparseBtn" style="margin-top:-4px;">Re-scan this text for questions</button>
+      </div>
       <div id="draftsWrap" style="margin-top:14px;"></div>
     </div>
 
@@ -300,10 +305,67 @@ function parseQAPairs(text){
   return pairs;
 }
 
+function renderDrafts(pairs){
+  const draftsWrap = document.getElementById("draftsWrap");
+  if (pairs.length === 0){
+    draftsWrap.innerHTML = `<div class="muted">Couldn't automatically spot question/answer pairs in that text. Edit the raw text above to tidy it up (e.g. put each answer on its own line starting with "A:") and click "Re-scan this text for questions", or copy what you need into the form above manually.</div>`;
+    return;
+  }
+  draftsWrap.innerHTML = `<div class="muted" style="margin-bottom:10px;">Found ${pairs.length} draft question${pairs.length===1?'':'s'} — review/edit, then save each one:</div>` +
+    pairs.map((p, idx) => `
+      <div class="draft" data-idx="${idx}">
+        <div class="row">
+          <div>
+            <label>Question</label>
+            <div class="field-with-mic">
+              <textarea class="draftQ">${escapeHtml(p.question)}</textarea>
+              <span class="mic-mount-q"></span>
+            </div>
+          </div>
+        </div>
+        <div class="row">
+          <div>
+            <label>Answer</label>
+            <div class="field-with-mic">
+              <input type="text" class="draftA" value="${escapeHtml(p.answer)}">
+              <span class="mic-mount-a"></span>
+            </div>
+          </div>
+        </div>
+        <button class="secondary saveDraftBtn">Save this question</button>
+        <span class="status draftStatus"></span>
+      </div>
+    `).join("");
+  draftsWrap.querySelectorAll(".draft").forEach(el => {
+    attachMic(el.querySelector(".draftQ"), el.querySelector(".mic-mount-q"));
+    attachMic(el.querySelector(".draftA"), el.querySelector(".mic-mount-a"));
+    el.querySelector(".saveDraftBtn").onclick = async () => {
+      const q = el.querySelector(".draftQ").value;
+      const a = el.querySelector(".draftA").value;
+      const st = el.querySelector(".draftStatus");
+      try {
+        st.textContent = "Saving…";
+        await addQuestion(q, a);
+        st.textContent = "Saved ✓";
+        el.querySelector(".saveDraftBtn").disabled = true;
+        loadQuestions();
+      } catch (e) {
+        st.textContent = "Error: " + e.message;
+      }
+    };
+  });
+}
+
+document.getElementById("reparseBtn").onclick = () => {
+  const text = document.getElementById("rawTextBox").value;
+  renderDrafts(parseQAPairs(text));
+};
+
 document.getElementById("extractBtn").onclick = async () => {
   const fileInput = document.getElementById("imgInput");
   const statusEl = document.getElementById("ocrStatus");
-  const draftsWrap = document.getElementById("draftsWrap");
+  const rawTextWrap = document.getElementById("rawTextWrap");
+  const rawTextBox = document.getElementById("rawTextBox");
   if (!fileInput.files || !fileInput.files[0]){
     statusEl.textContent = "Choose an image first.";
     return;
@@ -319,56 +381,10 @@ document.getElementById("extractBtn").onclick = async () => {
         }
       }
     });
-    statusEl.textContent = "";
-    const pairs = parseQAPairs(text);
-    if (pairs.length === 0){
-      draftsWrap.innerHTML = `<div class="muted">Couldn't automatically spot question/answer pairs in that image. Raw extracted text is below — copy what you need into the form above.</div>
-        <textarea readonly style="margin-top:8px;">${escapeHtml(text)}</textarea>`;
-      return;
-    }
-    draftsWrap.innerHTML = `<div class="muted" style="margin-bottom:10px;">Found ${pairs.length} draft question${pairs.length===1?'':'s'} — review/edit, then save each one:</div>` +
-      pairs.map((p, idx) => `
-        <div class="draft" data-idx="${idx}">
-          <div class="row">
-            <div>
-              <label>Question</label>
-              <div class="field-with-mic">
-                <textarea class="draftQ">${escapeHtml(p.question)}</textarea>
-                <span class="mic-mount-q"></span>
-              </div>
-            </div>
-          </div>
-          <div class="row">
-            <div>
-              <label>Answer</label>
-              <div class="field-with-mic">
-                <input type="text" class="draftA" value="${escapeHtml(p.answer)}">
-                <span class="mic-mount-a"></span>
-              </div>
-            </div>
-          </div>
-          <button class="secondary saveDraftBtn">Save this question</button>
-          <span class="status draftStatus"></span>
-        </div>
-      `).join("");
-    draftsWrap.querySelectorAll(".draft").forEach(el => {
-      attachMic(el.querySelector(".draftQ"), el.querySelector(".mic-mount-q"));
-      attachMic(el.querySelector(".draftA"), el.querySelector(".mic-mount-a"));
-      el.querySelector(".saveDraftBtn").onclick = async () => {
-        const q = el.querySelector(".draftQ").value;
-        const a = el.querySelector(".draftA").value;
-        const st = el.querySelector(".draftStatus");
-        try {
-          st.textContent = "Saving…";
-          await addQuestion(q, a);
-          st.textContent = "Saved ✓";
-          el.querySelector(".saveDraftBtn").disabled = true;
-          loadQuestions();
-        } catch (e) {
-          st.textContent = "Error: " + e.message;
-        }
-      };
-    });
+    statusEl.textContent = "Done — check the extracted text and drafts below.";
+    rawTextBox.value = text;
+    rawTextWrap.style.display = "block";
+    renderDrafts(parseQAPairs(text));
   } catch (e) {
     statusEl.textContent = "Error: " + e.message;
   }
