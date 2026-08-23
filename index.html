@@ -229,15 +229,17 @@ function renderPicker(){
   });
 }
 
-function quoteOfTheDay(){
-  const seed = Number(todayStr().replaceAll("-",""));
-  return QUOTES[seed % QUOTES.length];
+function randomQuote(){
+  return QUOTES[Math.floor(Math.random() * QUOTES.length)];
 }
 
 async function render(){
   renderPicker();
   if (!selected){
-    mainEl.innerHTML = `<div class="card status-msg">Pick your name above to log today's water intake and see your stats.</div>`;
+    mainEl.innerHTML = `
+      <div class="card status-msg">Pick your name above to log today's water intake and see your stats.</div>
+      <div id="lbSlot"></div>
+    `;
     await renderLeaderboard(null);
     return;
   }
@@ -247,7 +249,7 @@ async function render(){
     fetchTodayFor(selected.id),
     fetchGoal(selected.id)
   ]);
-  const [q, qa] = quoteOfTheDay();
+  const [q, qa] = randomQuote();
   const pct = Math.min(100, Math.round((todayLiters/goal)*100));
 
   mainEl.innerHTML = `
