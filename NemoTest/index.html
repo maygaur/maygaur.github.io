@@ -12,6 +12,7 @@
     --bg:#f5f3ff; --card:#ffffff; --text:#1e1b2e; --muted:#6b6480;
     --accent:#7c3aed; --accent-dark:#6d28d9; --good:#16a34a; --goodbg:#dcfce7;
     --bad:#dc2626; --badbg:#fee2e2; --border:#e9e5f9;
+    --partial:#b45309; --partialbg:#fef3c7;
     --shadow:0 1px 3px rgba(60,40,110,.08), 0 8px 24px rgba(60,40,110,.06);
   }
   @media (prefers-color-scheme: dark){
@@ -19,6 +20,7 @@
       --bg:#150f24; --card:#1e1733; --text:#ede9fe; --muted:#a49cc4;
       --accent:#a78bfa; --accent-dark:#8b5cf6; --good:#4ade80; --goodbg:#123321;
       --bad:#f87171; --badbg:#3a1414; --border:#332a54;
+      --partial:#fbbf24; --partialbg:#3a2e0a;
       --shadow:0 1px 3px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.25);
     }
   }
@@ -47,6 +49,8 @@
   .feedback{margin-top:10px; padding:10px 12px; border-radius:10px; font-size:13.5px; font-weight:600; display:none;}
   .feedback.correct{display:block; background:var(--goodbg); color:var(--good);}
   .feedback.incorrect{display:block; background:var(--badbg); color:var(--bad);}
+  .feedback.partial{display:block; background:var(--partialbg); color:var(--partial);}
+  .feedback .closeness{display:block; font-weight:400; margin-top:3px; opacity:.85;}
   .score-card{position:sticky; top:12px; text-align:center; z-index:5;}
   .score-big{font-size:32px; font-weight:800; color:var(--accent);}
   .score-label{color:var(--muted); font-size:12.5px;}
@@ -65,6 +69,8 @@
   <div class="card score-card" id="scoreCard" style="display:none;">
     <div class="score-big" id="scoreBig">0 / 0</div>
     <div class="score-label">questions correct so far</div>
+    <div class="score-big" id="scoreAvg" style="font-size:20px; margin-top:8px;">— / 10</div>
+    <div class="score-label">average closeness score</div>
   </div>
 
   <div id="quizContent">
@@ -127,13 +133,47 @@ function attachMic(inputEl, mountEl){
 const contentEl = document.getElementById("quizContent");
 const scoreCardEl = document.getElementById("scoreCard");
 const scoreBigEl = document.getElementById("scoreBig");
+const scoreAvgEl = document.getElementById("scoreAvg");
 
-let results = {}; // qid -> true/false
+let results = {}; // qid -> { correct: bool, score10: number }
+
+// ---------- closeness scoring (0-10) ----------
+function levenshtein(a, b){
+  const m = a.length, n = b.length;
+  if (m === 0) return n;
+  if (n === 0) return m;
+  const dp = new Array(n + 1);
+  for (let j = 0; j <= n; j++) dp[j] = j;
+  for (let i = 1; i <= m; i++){
+    let prev = dp[0];
+    dp[0] = i;
+    for (let j = 1; j <= n; j++){
+      const tmp = dp[j];
+      dp[j] = a[i-1] === b[j-1]
+        ? prev
+        : 1 + Math.min(prev, dp[j], dp[j-1]);
+      prev = tmp;
+    }
+  }
+  return dp[n];
+}
+function closenessScore(given, correct){
+  const a = normalize(given), b = normalize(correct);
+  if (!a && !b) return 10;
+  if (!a || !b) return 0;
+  if (a === b) return 10;
+  const dist = levenshtein(a, b);
+  const sim = 1 - dist / Math.max(a.length, b.length);
+  return Math.max(0, Math.min(10, Math.round(sim * 10)));
+}
 
 function updateScore(){
-  const total = Object.keys(results).length;
-  const correct = Object.values(results).filter(Boolean).length;
+  const entries = Object.values(results);
+  const total = entries.length;
+  const correct = entries.filter(r => r.correct).length;
   scoreBigEl.textContent = `${correct} / ${total}`;
+  const avg = total ? entries.reduce((s, r) => s + r.score10, 0) / total : 0;
+  scoreAvgEl.textContent = `${avg.toFixed(1)} / 10`;
 }
 
 async function loadQuestions(){
@@ -174,9 +214,12 @@ async function loadQuestions(){
     const submit = () => {
       if (btn.disabled) return;
       const isCorrect = normalize(input.value) === normalize(q.answer);
-      results[q.id] = isCorrect;
-      fb.className = "feedback " + (isCorrect ? "correct" : "incorrect");
-      fb.textContent = isCorrect ? "✓ Correct!" : `✗ Not quite — correct answer: ${q.answer}`;
+      const score10 = closenessScore(input.value, q.answer);
+      results[q.id] = { correct: isCorrect, score10 };
+      const cls = isCorrect ? "correct" : (score10 >= 5 ? "partial" : "incorrect");
+      fb.className = "feedback " + cls;
+      const mainLine = isCorrect ? "✓ Correct!" : `✗ Not quite — correct answer: ${escapeHtml(q.answer)}`;
+      fb.innerHTML = `${mainLine}<span class="closeness">Closeness score: ${score10} / 10</span>`;
       input.disabled = true;
       btn.disabled = true;
       updateScore();
