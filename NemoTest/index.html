@@ -51,6 +51,15 @@
   .feedback.incorrect{display:block; background:var(--badbg); color:var(--bad);}
   .feedback.partial{display:block; background:var(--partialbg); color:var(--partial);}
   .feedback .closeness{display:block; font-weight:400; margin-top:3px; opacity:.85;}
+  .diff-section{margin-top:10px; padding-top:10px; border-top:1px dashed var(--border); display:none;}
+  .diff-line{font-size:13.5px; margin-bottom:6px; line-height:1.7; word-break:break-word;}
+  .diff-tag{display:inline-block; font-size:10px; font-weight:700; text-transform:uppercase;
+    letter-spacing:.03em; color:var(--muted); margin-right:6px; min-width:74px; vertical-align:middle;}
+  .ch-match{background:var(--goodbg); color:var(--good); border-radius:3px;}
+  .ch-miss-given{background:var(--badbg); color:var(--bad); border-radius:3px; text-decoration:line-through; text-decoration-thickness:1.5px;}
+  .ch-miss-correct{background:var(--partialbg); color:var(--partial); border-radius:3px;}
+  .diff-legend{font-size:11px; color:var(--muted); margin-top:2px;}
+  .diff-legend span{display:inline-block; padding:0 5px; border-radius:3px; margin-right:4px;}
   .score-card{position:sticky; top:12px; text-align:center; z-index:5;}
   .score-big{font-size:32px; font-weight:800; color:var(--accent);}
   .score-label{color:var(--muted); font-size:12.5px;}
@@ -167,6 +176,41 @@ function closenessScore(given, correct){
   return Math.max(0, Math.min(10, Math.round(sim * 10)));
 }
 
+// ---------- character-level match diff (for the color-coded comparison) ----------
+function lcsCharMask(a, b){ // a, b: arrays of lowercase chars
+  const m = a.length, n = b.length;
+  const dp = Array.from({ length: m + 1 }, () => new Uint16Array(n + 1));
+  for (let i = 1; i <= m; i++){
+    for (let j = 1; j <= n; j++){
+      dp[i][j] = a[i-1] === b[j-1] ? dp[i-1][j-1] + 1 : Math.max(dp[i-1][j], dp[i][j-1]);
+    }
+  }
+  const matchA = new Array(m).fill(false);
+  const matchB = new Array(n).fill(false);
+  let i = m, j = n;
+  while (i > 0 && j > 0){
+    if (a[i-1] === b[j-1]){ matchA[i-1] = true; matchB[j-1] = true; i--; j--; }
+    else if (dp[i-1][j] >= dp[i][j-1]) i--;
+    else j--;
+  }
+  return { matchA, matchB };
+}
+function escapeChar(ch){
+  const d = document.createElement("div");
+  d.textContent = ch;
+  return d.innerHTML === "" ? "&nbsp;" : d.innerHTML; // preserve visible spaces
+}
+function buildDiffHtml(given, correct){
+  const g = given.trim() ? Array.from(given) : [];
+  const c = correct.trim() ? Array.from(correct) : [];
+  const { matchA, matchB } = lcsCharMask(g.map(ch => ch.toLowerCase()), c.map(ch => ch.toLowerCase()));
+  const givenHtml = g.map((ch, i) =>
+    `<span class="${matchA[i] ? 'ch-match' : 'ch-miss-given'}">${escapeChar(ch)}</span>`).join("") || '<span class="ch-miss-given">(no answer given)</span>';
+  const correctHtml = c.map((ch, i) =>
+    `<span class="${matchB[i] ? 'ch-match' : 'ch-miss-correct'}">${escapeChar(ch)}</span>`).join("");
+  return { givenHtml, correctHtml };
+}
+
 function updateScore(){
   const entries = Object.values(results);
   const total = entries.length;
@@ -203,6 +247,7 @@ async function loadQuestions(){
         <button id="check_${q.id}">Check</button>
       </div>
       <div class="feedback" id="fb_${q.id}"></div>
+      <div class="diff-section" id="diff_${q.id}"></div>
     </div>
   `).join("");
 
@@ -210,6 +255,7 @@ async function loadQuestions(){
     const input = document.getElementById(`ans_${q.id}`);
     const btn = document.getElementById(`check_${q.id}`);
     const fb = document.getElementById(`fb_${q.id}`);
+    const diffEl = document.getElementById(`diff_${q.id}`);
     attachMic(input, document.getElementById(`mic_${q.id}`));
     const submit = () => {
       if (btn.disabled) return;
@@ -220,6 +266,17 @@ async function loadQuestions(){
       fb.className = "feedback " + cls;
       const mainLine = isCorrect ? "✓ Correct!" : `✗ Not quite — correct answer: ${escapeHtml(q.answer)}`;
       fb.innerHTML = `${mainLine}<span class="closeness">Closeness score: ${score10} / 10</span>`;
+
+      const { givenHtml, correctHtml } = buildDiffHtml(input.value, q.answer);
+      diffEl.innerHTML = `
+        <div class="diff-line"><span class="diff-tag">You wrote</span>${givenHtml}</div>
+        <div class="diff-line"><span class="diff-tag">Correct answer</span>${correctHtml}</div>
+        <div class="diff-legend">
+          <span class="ch-match">matched</span><span class="ch-miss-given">wrong/extra</span><span class="ch-miss-correct">missed</span>
+        </div>
+      `;
+      diffEl.style.display = "block";
+
       input.disabled = true;
       btn.disabled = true;
       updateScore();
