@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>NemoTest Admin</title>
+<meta name="theme-color" content="#7c3aed">
+<meta name="robots" content="noindex, nofollow">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='20' fill='%237c3aed'/%3E%3Ctext x='50' y='68' font-size='55' text-anchor='middle' fill='white'%3E%F0%9F%94%92%3C/text%3E%3C/svg%3E">
+<style>
+  :root{
+    --bg:#f5f3ff; --card:#ffffff; --text:#1e1b2e; --muted:#6b6480;
+    --accent:#7c3aed; --accent-dark:#6d28d9; --good:#16a34a; --bad:#dc2626;
+    --border:#e9e5f9; --shadow:0 1px 3px rgba(60,40,110,.08), 0 8px 24px rgba(60,40,110,.06);
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#150f24; --card:#1e1733; --text:#ede9fe; --muted:#a49cc4;
+      --accent:#a78bfa; --accent-dark:#8b5cf6; --good:#4ade80; --bad:#f87171;
+      --border:#332a54; --shadow:0 1px 3px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.25);
+    }
+  }
+  *{box-sizing:border-box;}
+  body{margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg); color:var(--text); padding-bottom:40px;}
+  .wrap{max-width:600px; margin:0 auto; padding:16px;}
+  header{padding:20px 4px 10px; text-align:center;}
+  header h1{font-size:20px; margin:0 0 2px;}
+  header .sub{color:var(--muted); font-size:13px;}
+  .card{background:var(--card); border:1px solid var(--border); border-radius:16px;
+    padding:18px; margin-bottom:14px; box-shadow:var(--shadow);}
+  label{font-size:12.5px; font-weight:700; color:var(--muted); display:block; margin-bottom:5px; text-transform:uppercase; letter-spacing:.03em;}
+  input[type=text], input[type=password], textarea{
+    width:100%; padding:12px; border-radius:10px; border:1px solid var(--border);
+    background:var(--bg); color:var(--text); font-size:15px; margin-bottom:12px; font-family:inherit;
+  }
+  textarea{resize:vertical; min-height:60px;}
+  button{padding:12px 18px; border-radius:10px; border:none; background:var(--accent);
+    color:#fff; font-weight:700; font-size:14px; cursor:pointer;}
+  button.secondary{background:transparent; color:var(--accent); border:1px solid var(--accent);}
+  button.danger{background:transparent; color:var(--bad); border:1px solid var(--bad); padding:6px 12px; font-size:12.5px;}
+  button:disabled{opacity:.5; cursor:default;}
+  .field-with-mic{display:flex; gap:8px; align-items:flex-start;}
+  .field-with-mic > *:first-child{flex:1;}
+  .mic-btn{padding:10px 12px; background:var(--card); color:var(--accent);
+    border:1px solid var(--border); border-radius:10px; font-size:15px; line-height:1; cursor:pointer; margin-bottom:12px;}
+  .mic-btn.listening{background:var(--bad); color:#fff; border-color:var(--bad); animation:pulse 1s infinite;}
+  @keyframes pulse{0%,100%{opacity:1;} 50%{opacity:.55;}}
+  .pin-wrap{max-width:320px; margin:60px auto 0; text-align:center;}
+  .pin-wrap h2{font-size:16px; margin-bottom:14px;}
+  .err{color:var(--bad); font-size:13px; margin-top:8px; display:none;}
+  .qrow{display:flex; justify-content:space-between; align-items:flex-start; gap:10px;
+    padding:12px 0; border-bottom:1px solid var(--border);}
+  .qrow:last-child{border-bottom:none;}
+  .qrow .qbody{flex:1;}
+  .qrow .qtext{font-weight:600; font-size:14px; margin-bottom:3px;}
+  .qrow .qans{font-size:12.5px; color:var(--good);}
+  .draft{border:1px dashed var(--border); border-radius:12px; padding:12px; margin-bottom:10px;}
+  .draft .row{display:flex; gap:8px;}
+  .draft .row > div{flex:1;}
+  .muted{color:var(--muted); font-size:12.5px;}
+  .status{font-size:12.5px; color:var(--muted); margin-top:8px;}
+  #adminPanel{display:none;}
+  .toprow{display:flex; justify-content:space-between; align-items:center;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="pin-wrap" id="pinScreen">
+    <div class="card">
+      <h2>🔒 NemoTest Admin</h2>
+      <input type="password" id="pinInput" placeholder="Enter PIN" inputmode="numeric">
+      <button id="pinBtn" style="width:100%;">Unlock</button>
+      <div class="err" id="pinErr">Incorrect PIN</div>
+    </div>
+  </div>
+
+  <div id="adminPanel">
+    <header>
+      <h1>🔧 NemoTest Admin</h1>
+      <div class="sub">Add or remove quiz questions</div>
+    </header>
+
+    <div class="card">
+      <div class="toprow"><label style="margin:0;">Add a question manually</label></div>
+      <label>Question</label>
+      <div class="field-with-mic">
+        <textarea id="newQ" placeholder="e.g. What is the capital of France?"></textarea>
+        <span id="mic_newQ"></span>
+      </div>
+      <label>Correct answer</label>
+      <div class="field-with-mic">
+        <input type="text" id="newA" placeholder="e.g. Paris">
+        <span id="mic_newA"></span>
+      </div>
+      <button id="addBtn">Add question</button>
+      <div class="status" id="addStatus"></div>
+    </div>
+
+    <div class="card">
+      <label>Extract questions from an image</label>
+      <div class="muted" style="margin-bottom:10px;">Upload a photo or screenshot of a question list. Text is read in your browser (nothing is uploaded anywhere) and turned into draft questions below — review and edit before saving, since OCR isn't perfect.</div>
+      <input type="file" id="imgInput" accept="image/*">
+      <button id="extractBtn" style="margin-top:10px;">Extract from image</button>
+      <div class="status" id="ocrStatus"></div>
+      <div id="draftsWrap" style="margin-top:14px;"></div>
+    </div>
+
+    <div class="card">
+      <label style="margin-bottom:10px;">Existing questions</label>
+      <div id="qList" class="muted">Loading…</div>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import {
+  getFirestore, collection, addDoc, deleteDoc, doc, getDocs, query, orderBy
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyDy6Zu4weC0IsDCrQ20FYC-OOxnXw_21vQ",
+  authDomain: "water-intake-beca8.firebaseapp.com",
+  projectId: "water-intake-beca8",
+  storageBucket: "water-intake-beca8.firebasestorage.app",
+  messagingSenderId: "1060774876551",
+  appId: "1:1060774876551:web:1eae13fb2aa3d2e028af22"
+};
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+
+const PIN_HASH = "27bb55ca7d1e8404f09fe32cd45c380b462107b39f2dee0c3e2193e25afdf1f6";
+
+async function sha256Hex(str){
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(str));
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,"0")).join("");
+}
+
+let adminAuth = null; // holds the verified hash, sent with every write
+
+// ---------- voice input (Web Speech API) ----------
+const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+function attachMic(inputEl, mountEl){
+  if (!SpeechRec || !mountEl) return; // not supported (e.g. iOS Safari) — no button shown
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "mic-btn";
+  btn.textContent = "🎤";
+  btn.title = "Speak your answer";
+  let recognizing = false;
+  let recognition;
+  btn.onclick = (e) => {
+    e.preventDefault();
+    if (recognizing){ recognition.stop(); return; }
+    recognition = new SpeechRec();
+    recognition.lang = "en-US";
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+    recognition.onstart = () => { recognizing = true; btn.classList.add("listening"); btn.textContent = "●"; };
+    recognition.onend = () => { recognizing = false; btn.classList.remove("listening"); btn.textContent = "🎤"; };
+    recognition.onerror = () => { recognizing = false; btn.classList.remove("listening"); btn.textContent = "🎤"; };
+    recognition.onresult = (ev) => {
+      const transcript = ev.results[0][0].transcript;
+      inputEl.value = (inputEl.value.trim() ? inputEl.value.trim() + " " : "") + transcript;
+      inputEl.focus();
+    };
+    recognition.start();
+  };
+  mountEl.appendChild(btn);
+}
+attachMic(document.getElementById("newQ"), document.getElementById("mic_newQ"));
+attachMic(document.getElementById("newA"), document.getElementById("mic_newA"));
+
+document.getElementById("pinBtn").onclick = tryUnlock;
+document.getElementById("pinInput").addEventListener("keydown", e => { if (e.key === "Enter") tryUnlock(); });
+
+async function tryUnlock(){
+  const val = document.getElementById("pinInput").value.trim();
+  const hash = await sha256Hex(val);
+  if (hash === PIN_HASH){
+    adminAuth = hash;
+    document.getElementById("pinScreen").style.display = "none";
+    document.getElementById("adminPanel").style.display = "block";
+    loadQuestions();
+  } else {
+    document.getElementById("pinErr").style.display = "block";
+  }
+}
+
+function escapeHtml(s){
+  const d = document.createElement("div");
+  d.textContent = String(s || "");
+  return d.innerHTML;
+}
+
+async function loadQuestions(){
+  const listEl = document.getElementById("qList");
+  listEl.textContent = "Loading…";
+  let snap;
+  try {
+    snap = await getDocs(query(collection(db, "nemo_questions"), orderBy("createdAt", "asc")));
+  } catch (e) {
+    snap = await getDocs(collection(db, "nemo_questions"));
+  }
+  const items = [];
+  snap.forEach(d => items.push({ id: d.id, ...d.data() }));
+
+  if (items.length === 0){
+    listEl.innerHTML = `<div class="muted">No questions yet — add one above.</div>`;
+    return;
+  }
+  listEl.innerHTML = items.map(q => `
+    <div class="qrow">
+      <div class="qbody">
+        <div class="qtext">${escapeHtml(q.question)}</div>
+        <div class="qans">Answer: ${escapeHtml(q.answer)}</div>
+      </div>
+      <button class="danger" data-id="${q.id}">Remove</button>
+    </div>
+  `).join("");
+  listEl.querySelectorAll("button[data-id]").forEach(btn => {
+    btn.onclick = async () => {
+      btn.disabled = true; btn.textContent = "Removing…";
+      try {
+        await deleteDoc(doc(db, "nemo_questions", btn.dataset.id));
+        loadQuestions();
+      } catch (e) {
+        alert("Couldn't remove: " + e.message);
+        btn.disabled = false; btn.textContent = "Remove";
+      }
+    };
+  });
+}
+
+async function addQuestion(question, answer){
+  if (!question.trim() || !answer.trim()) throw new Error("Question and answer are both required");
+  await addDoc(collection(db, "nemo_questions"), {
+    question: question.trim(),
+    answer: answer.trim(),
+    createdAt: Date.now(),
+    adminAuth
+  });
+}
+
+document.getElementById("addBtn").onclick = async () => {
+  const statusEl = document.getElementById("addStatus");
+  const q = document.getElementById("newQ").value;
+  const a = document.getElementById("newA").value;
+  try {
+    statusEl.textContent = "Saving…";
+    await addQuestion(q, a);
+    document.getElementById("newQ").value = "";
+    document.getElementById("newA").value = "";
+    statusEl.textContent = "Added!";
+    setTimeout(() => statusEl.textContent = "", 1500);
+    loadQuestions();
+  } catch (e) {
+    statusEl.textContent = "Error: " + e.message;
+  }
+};
+
+// ---------- image OCR extraction ----------
+let tesseractLoaded = null;
+function loadTesseract(){
+  if (tesseractLoaded) return tesseractLoaded;
+  tesseractLoaded = new Promise((resolve, reject) => {
+    const s = document.createElement("script");
+    s.src = "https://cdn.jsdelivr.net/npm/tesseract.js@5.0.4/dist/tesseract.min.js";
+    s.onload = resolve;
+    s.onerror = () => reject(new Error("Could not load OCR library — check your internet connection"));
+    document.head.appendChild(s);
+  });
+  return tesseractLoaded;
+}
+
+function parseQAPairs(text){
+  const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  const pairs = [];
+  let i = 0;
+  while (i < lines.length){
+    const line = lines[i];
+    const qMatch = line.match(/^(?:q(?:uestion)?\s*\.?\s*\d*[:.)]\s*)(.+)/i);
+    const looksLikeQuestion = qMatch || /\?\s*$/.test(line) || /^\d+[.)]\s*/.test(line);
+    if (looksLikeQuestion){
+      let qText = qMatch ? qMatch[1] : line.replace(/^\d+[.)]\s*/, "");
+      let j = i + 1;
+      let ans = "";
+      if (j < lines.length){
+        const aMatch = lines[j].match(/^(?:a(?:nswer)?\s*\.?\s*\d*[:.)]\s*)(.+)/i);
+        if (aMatch){ ans = aMatch[1]; j++; }
+      }
+      pairs.push({ question: qText.trim(), answer: ans.trim() });
+      i = j;
+    } else {
+      i++;
+    }
+  }
+  return pairs;
+}
+
+document.getElementById("extractBtn").onclick = async () => {
+  const fileInput = document.getElementById("imgInput");
+  const statusEl = document.getElementById("ocrStatus");
+  const draftsWrap = document.getElementById("draftsWrap");
+  if (!fileInput.files || !fileInput.files[0]){
+    statusEl.textContent = "Choose an image first.";
+    return;
+  }
+  try {
+    statusEl.textContent = "Loading OCR engine…";
+    await loadTesseract();
+    statusEl.textContent = "Reading image… this can take 10-30 seconds";
+    const { data: { text } } = await Tesseract.recognize(fileInput.files[0], "eng", {
+      logger: m => {
+        if (m.status === "recognizing text"){
+          statusEl.textContent = `Reading image… ${Math.round((m.progress||0)*100)}%`;
+        }
+      }
+    });
+    statusEl.textContent = "";
+    const pairs = parseQAPairs(text);
+    if (pairs.length === 0){
+      draftsWrap.innerHTML = `<div class="muted">Couldn't automatically spot question/answer pairs in that image. Raw extracted text is below — copy what you need into the form above.</div>
+        <textarea readonly style="margin-top:8px;">${escapeHtml(text)}</textarea>`;
+      return;
+    }
+    draftsWrap.innerHTML = `<div class="muted" style="margin-bottom:10px;">Found ${pairs.length} draft question${pairs.length===1?'':'s'} — review/edit, then save each one:</div>` +
+      pairs.map((p, idx) => `
+        <div class="draft" data-idx="${idx}">
+          <div class="row">
+            <div>
+              <label>Question</label>
+              <div class="field-with-mic">
+                <textarea class="draftQ">${escapeHtml(p.question)}</textarea>
+                <span class="mic-mount-q"></span>
+              </div>
+            </div>
+          </div>
+          <div class="row">
+            <div>
+              <label>Answer</label>
+              <div class="field-with-mic">
+                <input type="text" class="draftA" value="${escapeHtml(p.answer)}">
+                <span class="mic-mount-a"></span>
+              </div>
+            </div>
+          </div>
+          <button class="secondary saveDraftBtn">Save this question</button>
+          <span class="status draftStatus"></span>
+        </div>
+      `).join("");
+    draftsWrap.querySelectorAll(".draft").forEach(el => {
+      attachMic(el.querySelector(".draftQ"), el.querySelector(".mic-mount-q"));
+      attachMic(el.querySelector(".draftA"), el.querySelector(".mic-mount-a"));
+      el.querySelector(".saveDraftBtn").onclick = async () => {
+        const q = el.querySelector(".draftQ").value;
+        const a = el.querySelector(".draftA").value;
+        const st = el.querySelector(".draftStatus");
+        try {
+          st.textContent = "Saving…";
+          await addQuestion(q, a);
+          st.textContent = "Saved ✓";
+          el.querySelector(".saveDraftBtn").disabled = true;
+          loadQuestions();
+        } catch (e) {
+          st.textContent = "Error: " + e.message;
+        }
+      };
+    });
+  } catch (e) {
+    statusEl.textContent = "Error: " + e.message;
+  }
+};
+</script>
+</body>
+</html>
