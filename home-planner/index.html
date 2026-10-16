@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#1f5fae">
+  <title>Home Buying Planner</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%232a78d6'/%3E%3Cpath d='M7 16 16 8l9 8v9h-6v-6h-6v6H7z' fill='white'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand" aria-hidden="true">
+      <svg viewBox="0 0 32 32" width="26" height="26"><rect width="32" height="32" rx="7" fill="var(--accent)"/><path d="M7 16 16 8l9 8v9h-6v-6h-6v6H7z" fill="#fff"/></svg>
+    </div>
+    <div class="planner-switch">
+      <label for="plannerSelect" class="sr-only">Planner</label>
+      <select id="plannerSelect" title="Switch planner"></select>
+    </div>
+    <button class="sync-badge" id="syncBadge" data-act="tab" data-tab="data" hidden title="GitHub sync"></button>
+    <nav class="tabs" id="tabs" aria-label="Sections">
+      <button data-tab="scenarios">
+        <svg viewBox="0 0 24 24"><path d="M4 5h16M4 12h16M4 19h10"/></svg><span>Scenarios</span></button>
+      <button data-tab="profile">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c1-4 4-6 8-6s7 2 8 6"/></svg><span>Profile</span></button>
+      <button data-tab="editor">
+        <svg viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg><span>Editor</span></button>
+      <button data-tab="compare">
+        <svg viewBox="0 0 24 24"><path d="M5 20V10M12 20V4M19 20v-7"/></svg><span>Compare</span></button>
+      <button data-tab="data">
+        <svg viewBox="0 0 24 24"><ellipse cx="12" cy="6" rx="7" ry="3"/><path d="M5 6v12c0 1.7 3.1 3 7 3s7-1.3 7-3V6M5 12c0 1.7 3.1 3 7 3s7-1.3 7-3"/></svg><span>Data</span></button>
+    </nav>
+  </header>
+
+  <div id="backupBanner" class="banner" hidden></div>
+
+  <main id="main">
+    <section id="view-welcome" class="view" hidden></section>
+    <section id="view-scenarios" class="view" hidden></section>
+    <section id="view-profile" class="view" hidden></section>
+    <section id="view-editor" class="view" hidden></section>
+    <section id="view-compare" class="view" hidden></section>
+    <section id="view-data" class="view" hidden></section>
+  </main>
+
+  <div id="modalRoot"></div>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <input type="file" id="importFile" accept=".json,application/json" hidden>
+
+  <script src="vendor/chart.umd.min.js"></script>
+  <script src="js/engine.js"></script>
+  <script src="js/schema.js"></script>
+  <script src="js/charts.js"></script>
+  <script src="js/sync.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
