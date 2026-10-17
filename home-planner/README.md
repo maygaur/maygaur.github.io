@@ -36,7 +36,8 @@ Notes: a secret gist is unlisted, not private; anyone with its link can read it,
 3. **Create starter scenarios**: Buy using savings, Buy by selling Home 1, Keep renting. Or use **New scenario** to pick a template.
 4. **Editor**: open a scenario and change anything. Changes apply only to that scenario and are marked *changed* (↺ resets to the profile value). The **Quick what-if** sliders and every input update the numbers and charts live. **Save** overwrites, **Save as new** keeps the original and stores the tweak under a new name. Names are generated from the settings unless you type your own.
 5. **Compare**: tick up to three scenarios to get a recommendation, a side-by-side table (best value highlighted), charts and a year-by-year table.
-6. **Data**: switch between multiple planners, rename/duplicate/delete them, export/import backup files, reset everything, and choose light/dark theme.
+6. **Zoom charts**: use − / + / Reset or the slider above any chart. On a computer, drag across the chart or Ctrl/⌘ + scroll to zoom, Shift + scroll to move, double-click to reset. On a phone, pinch to zoom, drag with two fingers to move, double-tap to reset. Zoom stays while you tweak inputs.
+7. **Data**: switch between multiple planners, rename/duplicate/delete them, export/import backup files, reset everything, and choose light/dark theme.
 
 ## What the model assumes
 

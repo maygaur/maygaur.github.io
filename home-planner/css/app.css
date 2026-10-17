@@ -274,6 +274,36 @@ input::placeholder { color: var(--text-muted); opacity: .8; }
 @media (max-width: 600px) { .chart-box { height: 260px; } .chart-box.tall { height: 300px; } }
 .chart-note { font-size: .8rem; color: var(--text-muted); margin-top: 8px; }
 
+/* ---------- chart zoom ---------- */
+.chart-box { -webkit-user-select: none; user-select: none; }
+.zoom-bar { margin: 2px 0 8px; }
+.zoom-row { display: flex; align-items: center; gap: 6px; }
+.zoom-btn { min-width: 34px; min-height: 32px; padding: 0 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-1); color: var(--text-primary); font: inherit; font-size: 1rem; line-height: 1; cursor: pointer; }
+.zoom-btn:hover:not(:disabled) { background: var(--surface-2); }
+.zoom-btn:disabled { opacity: .4; cursor: default; }
+.zoom-reset { font-size: .82rem; }
+.zoom-range { flex: 1; min-width: 0; text-align: center; font-size: .82rem; color: var(--text-secondary); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.zoom-slider { position: relative; height: 28px; margin: 4px 2px 0; }
+.zoom-track { position: absolute; left: 11px; right: 11px; top: 12px; height: 4px; border-radius: 2px; background: var(--grid); }
+.zoom-fill { position: absolute; top: 0; bottom: 0; background: var(--accent); border-radius: 2px; }
+.zoom-slider input[type=range] { position: absolute; inset: 0; width: 100%; height: 28px; margin: 0; background: none; pointer-events: none; -webkit-appearance: none; appearance: none; }
+.zoom-slider input[type=range]::-webkit-slider-runnable-track { background: none; border: 0; height: 28px; }
+.zoom-slider input[type=range]::-moz-range-track { background: none; border: 0; }
+.zoom-slider input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; pointer-events: auto; width: 22px; height: 22px; margin-top: 3px; border-radius: 50%; background: var(--surface-1); border: 2px solid var(--accent); box-shadow: 0 1px 3px rgba(0,0,0,.25); cursor: grab; }
+.zoom-slider input[type=range]::-moz-range-thumb { pointer-events: auto; width: 18px; height: 18px; border-radius: 50%; background: var(--surface-1); border: 2px solid var(--accent); cursor: grab; }
+.zoom-slider input[type=range]:focus-visible::-webkit-slider-thumb { outline: 2px solid var(--accent); outline-offset: 2px; }
+.zoom-hint { font-size: .74rem; color: var(--text-muted); margin-top: 2px; }
+.zoom-sel { position: absolute; background: color-mix(in srgb, var(--accent) 18%, transparent); border: 1px solid var(--accent); border-radius: 3px; pointer-events: none; }
+@media (pointer: coarse) {
+  .zoom-btn { min-width: 40px; min-height: 38px; }
+  .zoom-slider { height: 34px; }
+  .zoom-track { top: 15px; left: 14px; right: 14px; }
+  .zoom-slider input[type=range] { height: 34px; }
+  .zoom-slider input[type=range]::-webkit-slider-runnable-track { height: 34px; }
+  .zoom-slider input[type=range]::-webkit-slider-thumb { width: 28px; height: 28px; margin-top: 3px; }
+  .zoom-slider input[type=range]::-moz-range-thumb { width: 24px; height: 24px; }
+}
+
 /* ---------- tables ---------- */
 .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; border: 1px solid var(--border); border-radius: 10px; }
 table.data { border-collapse: collapse; width: 100%; font-size: .84rem; font-variant-numeric: tabular-nums; }

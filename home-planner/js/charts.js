@@ -37,7 +37,7 @@
     C.defaults.plugins.tooltip.animation = false;
     // colour tweening has no interpolator in this build and throws on hover; numbers still animate
     C.defaults.animations.colors = false;
-    if (!C._hbpCrosshair) { C.register(crosshair); C._hbpCrosshair = true; }
+    if (!C._hbpCrosshair) { C.register(crosshair); C.register(zoomCleanup); C._hbpCrosshair = true; }
   }
 
   /** Crosshair through the hovered / tapped point, so the value can be read against both axes. */
@@ -103,6 +103,7 @@
 
   function draw(canvas, cfg) {
     if (!root.Chart || !canvas) return null;
+    applyZoom(canvas, cfg);
     if (canvas._chart) {
       var ch = canvas._chart;
       // update in place when the shape matches so live tweaks animate smoothly
@@ -112,6 +113,7 @@
         ch.options = cfg.options;
         ch._hbpFmt = lastFmt;
         ch.update();
+        zoomUi(canvas);
         return ch;
       }
       ch.destroy();
@@ -120,8 +122,225 @@
     c._key = cfg._key;
     c._hbpFmt = lastFmt;
     canvas._chart = c;
+    bindZoom(canvas);
+    zoomUi(canvas);
     return c;
   }
+
+  /*
+   * Zoom along the category axis (months, years or bars), kept per canvas so it survives live tweaks.
+   * Desktop: drag across the chart, Ctrl/⌘ + scroll (or trackpad pinch), Shift + scroll to move, double-click to reset.
+   * Phone: pinch with two fingers, drag with two fingers to move, double-tap to reset. One finger still reads values.
+   * Everywhere: the − / + / Reset buttons and the range slider above the chart.
+   */
+  var TOUCH = root.matchMedia && root.matchMedia('(hover: none), (pointer: coarse)').matches;
+  function zAxis(chart) { return chart.options.indexAxis === 'y' ? 'y' : 'x'; }
+  function minSpan(n) { return Math.min(n - 1, n > 24 ? 5 : 2); }
+  function clampZ(z, n) {
+    var span = Math.max(minSpan(n), Math.min(n - 1, Math.round(z.max - z.min)));
+    z.min = Math.max(0, Math.min(Math.round(z.min), n - 1 - span));
+    z.max = z.min + span;
+    z.full = z.min === 0 && z.max === n - 1;
+    return z;
+  }
+  function applyZoom(canvas, cfg) {
+    var n = cfg.data.labels.length, z = canvas._zoom;
+    if (!z || z.key !== cfg._key) z = canvas._zoom = { key: cfg._key, min: 0, max: n - 1, full: true };
+    if (z.full) { z.min = 0; z.max = n - 1; }
+    z.n = n;
+    var ax = cfg.options.indexAxis === 'y' ? 'y' : 'x';
+    cfg.options.scales = cfg.options.scales || {};
+    cfg.options.scales[ax] = cfg.options.scales[ax] || {};
+    if (n > 1 && !z.full) { clampZ(z, n); cfg.options.scales[ax].min = z.min; cfg.options.scales[ax].max = z.max; }
+    else { delete cfg.options.scales[ax].min; delete cfg.options.scales[ax].max; }
+  }
+  /** Set the visible window [min, max] (category indices) and redraw without animation. */
+  function setZoom(canvas, min, max) {
+    var ch = canvas._chart, z = canvas._zoom;
+    if (!ch || !z) return;
+    var n = ch.data.labels.length;
+    z.min = min; z.max = max; clampZ(z, n);
+    var sc = ch.options.scales[zAxis(ch)];
+    if (z.full) { delete sc.min; delete sc.max; } else { sc.min = z.min; sc.max = z.max; }
+    ch.update('none');
+    zoomUi(canvas);
+  }
+  function zoomBy(canvas, factor, anchor) {
+    var z = canvas._zoom; if (!z) return;
+    var span = (z.max - z.min) * factor;
+    if (anchor == null) anchor = (z.min + z.max) / 2;
+    var f = z.max > z.min ? (anchor - z.min) / (z.max - z.min) : 0.5;
+    if (factor > 1 && z.max - z.min < 3) span = z.max - z.min + 2; // small windows grow by at least a step
+    var min = anchor - f * span;
+    setZoom(canvas, min, min + span);
+  }
+  function panBy(canvas, steps) { var z = canvas._zoom; if (z && !z.full) setZoom(canvas, z.min + steps, z.max + steps); }
+  function resetZoom(canvas) { var ch = canvas._chart; if (ch) setZoom(canvas, 0, ch.data.labels.length - 1); }
+
+  /** Pointer position along the zoom axis, and the category index under it (fractional). */
+  function axisPos(chart, clientX, clientY) {
+    var r = chart.canvas.getBoundingClientRect();
+    return zAxis(chart) === 'y' ? clientY - r.top : clientX - r.left;
+  }
+  function idxAt(chart, pos) {
+    var z = chart.canvas._zoom, a = chart.chartArea, horiz = zAxis(chart) === 'y';
+    var lo = horiz ? a.top : a.left, len = horiz ? a.bottom - a.top : a.right - a.left;
+    var f = Math.max(0, Math.min(1, (pos - lo) / (len || 1)));
+    // categories are centred in equal slots; map the pixel to a fractional index in the visible window
+    return z.min - 0.5 + f * (z.max - z.min + 1);
+  }
+
+  function bindZoom(canvas) {
+    if (canvas._zoomBound) return;
+    canvas._zoomBound = true;
+    canvas.style.touchAction = 'pan-y';
+    var box = canvas.parentNode, sel = null, drag = null;
+
+    // desktop: drag across the chart to zoom into that range
+    canvas.addEventListener('pointerdown', function (e) {
+      if (e.pointerType !== 'mouse' || e.button !== 0 || !canvas._chart) return;
+      drag = { start: axisPos(canvas._chart, e.clientX, e.clientY), id: e.pointerId, moved: false };
+    });
+    canvas.addEventListener('pointermove', function (e) {
+      if (!drag || e.pointerId !== drag.id) return;
+      var ch = canvas._chart; if (!ch) return;
+      var cur = axisPos(ch, e.clientX, e.clientY);
+      if (!drag.moved && Math.abs(cur - drag.start) < 8) return;
+      if (!drag.moved) { drag.moved = true; try { canvas.setPointerCapture(e.pointerId); } catch (x) {} }
+      if (!sel) { sel = document.createElement('div'); sel.className = 'zoom-sel'; box.appendChild(sel); }
+      var a = ch.chartArea, horiz = zAxis(ch) === 'y', lo = Math.min(cur, drag.start), hi = Math.max(cur, drag.start);
+      var bmin = horiz ? a.top : a.left, bmax = horiz ? a.bottom : a.right;
+      lo = Math.max(lo, bmin); hi = Math.min(hi, bmax);
+      var off = canvas.offsetTop, offL = canvas.offsetLeft;
+      if (horiz) Object.assign(sel.style, { left: offL + a.left + 'px', width: a.right - a.left + 'px', top: off + lo + 'px', height: Math.max(0, hi - lo) + 'px' });
+      else Object.assign(sel.style, { top: off + a.top + 'px', height: a.bottom - a.top + 'px', left: offL + lo + 'px', width: Math.max(0, hi - lo) + 'px' });
+    });
+    function endDrag(e) {
+      if (!drag || (e && e.pointerId !== drag.id)) return;
+      var d = drag, ch = canvas._chart; drag = null;
+      if (sel) { sel.remove(); sel = null; }
+      if (!d.moved || !ch || !e || e.type === 'pointercancel') return;
+      var a = idxAt(ch, d.start), b = idxAt(ch, axisPos(ch, e.clientX, e.clientY));
+      setZoom(canvas, Math.round(Math.min(a, b)), Math.round(Math.max(a, b)));
+    }
+    canvas.addEventListener('pointerup', endDrag);
+    canvas.addEventListener('pointercancel', endDrag);
+    canvas.addEventListener('dblclick', function () { resetZoom(canvas); });
+
+    // Ctrl/⌘ + wheel (and trackpad pinch, which arrives as ctrl+wheel) zooms; Shift + wheel or sideways scroll pans
+    canvas.addEventListener('wheel', function (e) {
+      var ch = canvas._chart, z = canvas._zoom; if (!ch || !z) return;
+      var sideways = Math.abs(e.deltaX) > Math.abs(e.deltaY);
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault();
+        var k = Math.exp(Math.max(-1, Math.min(1, e.deltaY * (e.deltaMode ? 30 : 1) / 300)));
+        zoomBy(canvas, k, idxAt(ch, axisPos(ch, e.clientX, e.clientY)));
+      } else if (!z.full && (e.shiftKey || sideways)) {
+        e.preventDefault();
+        var d = sideways ? e.deltaX : e.deltaY;
+        panBy(canvas, Math.sign(d) * Math.max(1, Math.round((z.max - z.min) * 0.1)));
+      }
+    }, { passive: false });
+
+    // touch: two-finger pinch zooms around the fingers and two-finger drag pans; one finger is left to the tooltip
+    var pinch = null, lastTap = 0, tapStart = null;
+    function touchPos(ch, t) { return axisPos(ch, t.clientX, t.clientY); }
+    canvas.addEventListener('touchstart', function (e) {
+      var ch = canvas._chart, z = canvas._zoom; if (!ch || !z) return;
+      if (e.touches.length === 2) {
+        e.preventDefault();
+        var p0 = touchPos(ch, e.touches[0]), p1 = touchPos(ch, e.touches[1]);
+        var a = ch.chartArea, horiz = zAxis(ch) === 'y';
+        pinch = { d: Math.max(30, Math.abs(p1 - p0)), anchor: idxAt(ch, (p0 + p1) / 2), min: z.min, max: z.max,
+          lo: horiz ? a.top : a.left, len: horiz ? a.bottom - a.top : a.right - a.left };
+        tapStart = null;
+      } else if (e.touches.length === 1) tapStart = { x: e.touches[0].clientX, y: e.touches[0].clientY, t: Date.now() };
+    }, { passive: false });
+    canvas.addEventListener('touchmove', function (e) {
+      if (tapStart && e.touches.length === 1 && Math.hypot(e.touches[0].clientX - tapStart.x, e.touches[0].clientY - tapStart.y) > 10) tapStart = null;
+      if (!pinch || e.touches.length !== 2) return;
+      e.preventDefault();
+      var ch = canvas._chart; if (!ch) return;
+      var p0 = touchPos(ch, e.touches[0]), p1 = touchPos(ch, e.touches[1]);
+      var span = (pinch.max - pinch.min + 1) * pinch.d / Math.max(30, Math.abs(p1 - p0));
+      var f = Math.max(0, Math.min(1, ((p0 + p1) / 2 - pinch.lo) / (pinch.len || 1)));
+      var min = pinch.anchor + 0.5 - f * span;
+      setZoom(canvas, min, min + span - 1);
+    }, { passive: false });
+    canvas.addEventListener('touchend', function (e) {
+      if (pinch && e.touches.length < 2) { pinch = null; return; }
+      if (!tapStart || e.touches.length) return;
+      var now = Date.now();
+      if (now - tapStart.t < 300) {
+        if (now - lastTap < 350) { lastTap = 0; resetZoom(canvas); }
+        else lastTap = now;
+      }
+      tapStart = null;
+    });
+  }
+
+  /** The control strip above each chart: − / + / Reset, the visible range and a two-handle slider. */
+  function zoomUi(canvas) {
+    var box = canvas.parentNode, ch = canvas._chart, z = canvas._zoom;
+    if (!box || !box.parentNode) return;
+    var bar = box.previousElementSibling;
+    if (!bar || !bar.classList.contains('zoom-bar')) {
+      bar = document.createElement('div');
+      bar.className = 'zoom-bar';
+      bar.innerHTML =
+        '<div class="zoom-row">' +
+        '<button type="button" class="zoom-btn" data-z="out" aria-label="Zoom out" title="Zoom out">−</button>' +
+        '<button type="button" class="zoom-btn" data-z="in" aria-label="Zoom in" title="Zoom in">+</button>' +
+        '<span class="zoom-range" aria-live="polite"></span>' +
+        '<button type="button" class="zoom-btn zoom-reset" data-z="reset" title="Show everything">Reset</button>' +
+        '</div>' +
+        '<div class="zoom-slider"><div class="zoom-track"><div class="zoom-fill"></div></div>' +
+        '<input type="range" data-z="lo" aria-label="Zoom start" step="1"><input type="range" data-z="hi" aria-label="Zoom end" step="1"></div>' +
+        '<div class="zoom-hint">' + (TOUCH ? 'Pinch the chart to zoom, drag with two fingers to move, double-tap to reset.' : 'Drag across the chart or Ctrl/⌘ + scroll to zoom. Shift + scroll moves, double-click resets.') + '</div>';
+      box.parentNode.insertBefore(bar, box);
+    }
+    bar._canvas = canvas;
+    if (!bar._bound) {
+      bar._bound = true;
+      bar.addEventListener('click', function (e) {
+        var b = e.target.closest('[data-z]'), cv = bar._canvas; if (!b || !cv) return;
+        if (b.dataset.z === 'in') zoomBy(cv, 0.5);
+        else if (b.dataset.z === 'out') zoomBy(cv, 2);
+        else if (b.dataset.z === 'reset') resetZoom(cv);
+      });
+      bar.addEventListener('input', function (e) {
+        var cv = bar._canvas, zz = cv && cv._zoom, ms;
+        if (!zz || !e.target.dataset.z) return;
+        var lo = +bar.querySelector('[data-z="lo"]').value, hi = +bar.querySelector('[data-z="hi"]').value;
+        ms = minSpan(zz.n);
+        if (e.target.dataset.z === 'lo') lo = Math.min(lo, hi - ms); else hi = Math.max(hi, lo + ms);
+        setZoom(cv, lo, hi);
+      });
+    }
+    var n = ch ? ch.data.labels.length : 0;
+    bar.hidden = !ch || !z || n < 5;
+    if (bar.hidden) return;
+    var lo = z.full ? 0 : z.min, hi = z.full ? n - 1 : z.max, labs = ch.data.labels, horiz = zAxis(ch) === 'y';
+    bar.querySelector('.zoom-range').textContent = z.full ? (horiz ? 'All ' + n + ' items' : 'All: ' + labs[0] + ' – ' + labs[n - 1])
+      : (horiz ? 'Items ' + (lo + 1) + '–' + (hi + 1) + ' of ' + n : labs[lo] + ' – ' + labs[hi]);
+    bar.querySelector('[data-z="in"]').disabled = hi - lo <= minSpan(n);
+    bar.querySelector('[data-z="out"]').disabled = bar.querySelector('[data-z="reset"]').disabled = z.full;
+    ['lo', 'hi'].forEach(function (k) {
+      var r = bar.querySelector('[data-z="' + k + '"]');
+      r.min = 0; r.max = n - 1;
+      if (document.activeElement !== r || r.value != (k === 'lo' ? lo : hi)) r.value = k === 'lo' ? lo : hi;
+    });
+    var fill = bar.querySelector('.zoom-fill');
+    fill.style.left = (lo / (n - 1) * 100) + '%'; fill.style.width = ((hi - lo) / (n - 1) * 100) + '%';
+  }
+  /** Hide a chart's zoom strip when the chart goes away (e.g. nothing to show for this scenario). */
+  var zoomCleanup = {
+    id: 'hbpZoom',
+    beforeDestroy: function (chart) {
+      var cv = chart.canvas;
+      setTimeout(function () { if (cv && !cv._chart) { var bar = cv.parentNode && cv.parentNode.previousElementSibling; if (bar && bar.classList.contains('zoom-bar')) bar.hidden = true; } }, 0);
+    }
+  };
 
   function moneyAxis(fmt, opts) {
     return Object.assign({
@@ -334,6 +553,7 @@
 
   root.HBPCharts = {
     applyDefaults: applyDefaults, cashflow: cashflow, outflows: outflows, wealth: wealth, opportunity: opportunity,
-    compareLines: compareLines, compareBars: compareBars, destroyAll: destroyAll, series: series
+    compareLines: compareLines, compareBars: compareBars, destroyAll: destroyAll, series: series,
+    zoom: setZoom, resetZoom: resetZoom
   };
 })(this);
