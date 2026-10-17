@@ -1074,13 +1074,29 @@
     return '<div class="tip-title">' + esc(title) + '</div>' + (sub ? '<div class="tip-sub">' + esc(sub) + '</div>' : '') + (body || '') + (note ? '<div class="tip-note">' + note + '</div>' : '');
   }
   function nz(v) { return Math.abs(v) >= 0.5; }
+  /** Plain-language list of the start / stop months set for income or expense lines. */
+  function stopNotes(r, what) {
+    var i = r.inputs, out = [];
+    if (what === 'income') {
+      if (i.income.salaryEndMonth) out.push('Salary and bonus stop after ' + monthName(i.income.salaryEndMonth) + '.');
+      if (i.income.otherStartMonth || i.income.otherEndMonth) out.push('Other income ' + (i.income.otherStartMonth ? 'starts ' + monthName(i.income.otherStartMonth) : '') + (i.income.otherStartMonth && i.income.otherEndMonth ? ' and ' : '') + (i.income.otherEndMonth ? 'stops after ' + monthName(i.income.otherEndMonth) : '') + '.');
+      if (i.home1.owned && i.home1.rentEndMonth) out.push('Home 1 rent stops after ' + monthName(i.home1.rentEndMonth) + '.');
+      if (i.home2.owned && i.home2.rentEndMonth) out.push('Home 2 rent stops after ' + monthName(i.home2.rentEndMonth) + '.');
+    } else {
+      (i.expenses.items || []).forEach(function (it) {
+        if (!it.startMonth && !it.endMonth) return;
+        out.push(esc(it.name || (it.kind === 'sip' ? 'SIP' : 'Expense')) + ': ' + (it.startMonth ? 'from ' + monthName(it.startMonth) : '') + (it.startMonth && it.endMonth ? ' ' : '') + (it.endMonth ? 'until ' + monthName(it.endMonth) : '') + '.');
+      });
+    }
+    return out.join(' ');
+  }
   function startLiquid(r) { return (+r.inputs.assets.cash || 0) + (r.inputs.assets.holdings || []).reduce(function (a, h) { return a + (+h.balance || 0); }, 0); }
   function periodLabel(x, monthly) { return monthly ? monthName(x.ym) : (x.months < 12 ? x.year + ' (' + x.months + ' months in the projection)' : 'Year ' + x.year + ' (sum of 12 months)'); }
 
   var COL_HELP = {
     period: ['Period', 'Each row is one calendar year (or one month in Monthly view). Money flowing in or out is summed over the period; balances are as at the end of the period. The first and last years can be partial.'],
-    income: ['Income', 'Everything coming in: in-hand salary, the yearly bonus in its payout month, other income, rent from Home 1 (while you own it) and rent from Home 2 (once let out after possession). Salary and other income rise each year in the hike month; rents rise on their own schedules.'],
-    livingSip: ['Living & SIPs', 'Your monthly expense lines, each grown every January by its own rise % (or general inflation). SIP lines are included here as money leaving your account, but they are added to your investments, so they are saving, not spending.'],
+    income: ['Income', 'Everything coming in: in-hand salary, the yearly bonus in its payout month, other income, rent from Home 1 (while you own it) and rent from Home 2 (once let out after possession). Salary and other income rise each year in the hike month; rents rise on their own schedules. Anything with a stop month (retirement, a tenant leaving) drops out after it.'],
+    livingSip: ['Living & SIPs', 'Your monthly expense lines, each grown every January by its own rise % (or general inflation). SIP lines are included here as money leaving your account, but they are added to your investments, so they are saving, not spending. Lines with a From / Until month only count inside those months.'],
     rent: ['Rent', 'Rent for the flat you live in now. It rises by the renewal % in the renewal month and stops the month after you buy the new flat (or at Home 2 possession if you choose to move in there).'],
     emis: ['Home EMIs', 'Home 2 EMI + new flat EMI. Home 2: the EMI is recalculated each time the bank disburses (or is interest-only until possession in pre-EMI mode). New flat: a fixed EMI starting the month after purchase. Each EMI = interest on the outstanding loan + principal repaid.'],
     maint: ['Maintenance', 'Society maintenance and property tax you pay: Home 1 while you own it, Home 2 from possession, and the new flat after purchase. Grows with general inflation.'],
@@ -1102,13 +1118,13 @@
         return tip('Income', per, calc([
           ['', 'Salary (in-hand)', x.salary], nz(x.bonus) && ['+', 'Bonus', x.bonus], nz(x.otherIncome) && ['+', 'Other income', x.otherIncome],
           nz(x.h1Rent) && ['+', 'Home 1 rent', x.h1Rent], nz(x.h2Rent) && ['+', 'Home 2 rent', x.h2Rent]
-        ], ['Income', x.income]));
+        ], ['Income', x.income]), stopNotes(r, 'income'));
       case 'livingSip':
         return tip('Living & SIPs', per, calc([['', 'Living expenses', x.living], ['+', 'SIPs (go into investments)', x.sip]], ['Living & SIPs', x.living + x.sip]),
-          'Each expense line grows every January by its own rise % (blank = general inflation of ' + pct(+r.inputs.settings.inflationPct || 0) + ').');
+          'Each expense line grows every January by its own rise % (blank = general inflation of ' + pct(+r.inputs.settings.inflationPct || 0) + ').' + (stopNotes(r, 'expenses') ? '<br>' + stopNotes(r, 'expenses') : ''));
       case 'rent': {
-        var pu = r.res.purchase;
-        return tip('Rent', per, calc([['', 'Rent paid', x.rent]]), 'Rises ' + pct(+r.inputs.rent.escalationPct || 0) + ' each ' + S.CAL[(r.inputs.rent.renewalMonth || 1) - 1][1] + '.' + (pu ? ' Stops after ' + monthName(pu.ym) + ' when you buy.' : ''));
+        var pu = r.res.purchase, re = r.inputs.rent.endMonth;
+        return tip('Rent', per, calc([['', 'Rent paid', x.rent]]), 'Rises ' + pct(+r.inputs.rent.escalationPct || 0) + ' each ' + S.CAL[(r.inputs.rent.renewalMonth || 1) - 1][1] + '.' + (pu ? ' Stops after ' + monthName(pu.ym) + ' when you buy.' : '') + (re ? ' You stop paying rent after ' + monthName(re) + '.' : ''));
       }
       case 'emis':
         return tip('Home EMIs', per, calc([

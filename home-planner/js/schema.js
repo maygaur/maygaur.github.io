@@ -28,23 +28,28 @@
         { path: 'income.bonusAnnual', label: 'Annual bonus (after tax)', type: 'money', help: 'Fully variable, so try a cautious figure and stress it with the what-if sliders.' },
         { path: 'income.bonusMonth', label: 'Bonus paid in', type: 'calmonth' },
         { path: 'income.bonusGrowthPct', label: 'Bonus growth per year', type: 'pct' },
-        { path: 'income.otherMonthly', label: 'Other monthly income', type: 'money', help: 'Spouse income, interest payouts, etc. Rental income from your homes goes in their own sections.' },
-        { path: 'income.otherGrowthPct', label: 'Other income growth per year', type: 'pct' }
+        { path: 'income.salaryEndMonth', label: 'Salary stops after (optional)', type: 'month', help: 'Last month you are paid, e.g. retirement or a career break. The bonus stops with it. Leave blank if it continues.' },
+        { path: 'income.otherMonthly', label: 'Other monthly income', type: 'money', help: 'Spouse income, pension, interest payouts, etc. Rental income from your homes goes in their own sections.' },
+        { path: 'income.otherGrowthPct', label: 'Other income growth per year', type: 'pct' },
+        { path: 'income.otherStartMonth', label: 'Other income starts (optional)', type: 'month', help: 'For income that begins later, like a pension. Blank = from the start.' },
+        { path: 'income.otherEndMonth', label: 'Other income stops after (optional)', type: 'month' }
       ]
     },
     {
       id: 'expenses', title: 'Living expenses', icon: 'cart',
-      intro: 'Everything you spend monthly except rent and home-loan EMIs, which are calculated separately. Mark SIPs as "Investment (SIP)" so they count towards your savings.',
+      intro: 'Everything you spend monthly except rent and home-loan EMIs, which are calculated separately. Mark SIPs as "Investment (SIP)" so they count towards your savings. Use From / Until for lines that start or stop later, e.g. a SIP you stop at retirement or school fees that end.',
       fields: [
         {
           path: 'expenses.items', label: 'Monthly expense lines', type: 'list', req: true, addLabel: 'Add expense line',
-          newItem: function () { return { id: HBPEngine.uid('exp'), name: '', monthly: null, growthPct: null, kind: 'expense' }; },
+          newItem: function () { return { id: HBPEngine.uid('exp'), name: '', monthly: null, growthPct: null, kind: 'expense', startMonth: null, endMonth: null }; },
           cols: [
             { key: 'name', label: 'Name', type: 'text', placeholder: 'e.g. Groceries' },
             { key: 'monthly', label: 'Per month', type: 'money', req: true },
             { key: 'growthPct', label: 'Rise / yr', type: 'pct', placeholderFrom: 'settings.inflationPct' },
             { key: 'kind', label: 'Type', type: 'select', options: [['expense', 'Expense'], ['sip', 'Investment (SIP)']] },
-            { key: 'holdingId', label: 'Invests into', type: 'holding', when: function (it) { return it.kind === 'sip'; } }
+            { key: 'holdingId', label: 'Invests into', type: 'holding', when: function (it) { return it.kind === 'sip'; } },
+            { key: 'startMonth', label: 'From (optional)', type: 'month' },
+            { key: 'endMonth', label: 'Until (optional)', type: 'month' }
           ]
         },
         {
@@ -65,7 +70,8 @@
       fields: [
         { path: 'rent.monthly', label: 'Monthly rent', type: 'money', req: true },
         { path: 'rent.escalationPct', label: 'Rent increase at renewal', type: 'pct' },
-        { path: 'rent.renewalMonth', label: 'Renewal month', type: 'calmonth', sug: true }
+        { path: 'rent.renewalMonth', label: 'Renewal month', type: 'calmonth', sug: true },
+        { path: 'rent.endMonth', label: 'Stop paying rent after (optional)', type: 'month', help: 'If you will move out anyway (e.g. relocate or move in with family). Buying the flat stops rent on its own.' }
       ]
     },
     {
@@ -78,6 +84,7 @@
         { path: 'home1.rentMonthly', label: 'Rent received per month (net)', type: 'money', when: own1 },
         { path: 'home1.rentEscalationPct', label: 'Rent increase per year', type: 'pct', when: own1 },
         { path: 'home1.rentEscalationMonth', label: 'Rent increase month', type: 'calmonth', sug: true, when: own1 },
+        { path: 'home1.rentEndMonth', label: 'Rent received until (optional)', type: 'month', when: own1, help: 'Last month of rental income, e.g. if you will move in or keep it for family. Selling stops it on its own.' },
         { path: 'home1.maintenanceMonthly', label: 'Maintenance & tax you pay / month', type: 'money', when: own1 },
         { path: 'home1.sellingCostPct', label: 'Selling costs (brokerage etc.)', type: 'pct', when: own1 },
         { path: 'home1.capitalGainsTax', label: 'Capital gains tax if sold', type: 'money', when: own1, help: 'Your estimate after indexation / exemptions. Leave 0 if you plan to reinvest under an exemption.' }
@@ -116,6 +123,7 @@
         { path: 'home2.rentMonthly', label: 'Expected rent / month (today\'s level)', type: 'money', when: function (i) { return own2(i) && i.home2.afterPossession === 'rentOut'; } },
         { path: 'home2.rentStartDelayMonths', label: 'Months to find a tenant', type: 'int', min: 0, max: 24, unit: 'months', when: function (i) { return own2(i) && i.home2.afterPossession === 'rentOut'; } },
         { path: 'home2.rentEscalationPct', label: 'Rent increase per year', type: 'pct', when: function (i) { return own2(i) && i.home2.afterPossession === 'rentOut'; } },
+        { path: 'home2.rentEndMonth', label: 'Rent received until (optional)', type: 'month', when: function (i) { return own2(i) && i.home2.afterPossession === 'rentOut'; } },
         { path: 'home2.maintenanceMonthly', label: 'Maintenance after possession / month', type: 'money', when: own2 }
       ]
     },

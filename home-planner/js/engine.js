@@ -61,8 +61,8 @@
       settings: { startMonth: start, horizonYears: 10, inflationPct: 6, emergencyMonths: 6 },
       income: {
         salaryMonthly: null, hikePct: 8, hikeMonth: 1,
-        bonusAnnual: 0, bonusGrowthPct: 5, bonusMonth: 2,
-        otherMonthly: 0, otherGrowthPct: 0
+        bonusAnnual: 0, bonusGrowthPct: 5, bonusMonth: 2, salaryEndMonth: null,
+        otherMonthly: 0, otherGrowthPct: 0, otherStartMonth: null, otherEndMonth: null
       },
       expenses: {
         items: [
@@ -199,11 +199,15 @@
     var saleIdx = buying && P.sellHome1 && H1.owned ? (parseYM(P.home1SaleMonth) != null ? parseYM(P.home1SaleMonth) : pIdx) : null;
     if (saleIdx != null && saleIdx < start) saleIdx = start;
     var possIdx = parseYM(H2.possessionMonth);
+    // optional start / stop months (inclusive); null = no limit
+    var salEnd = parseYM(I.salaryEndMonth), othFrom = parseYM(I.otherStartMonth), othEnd = parseYM(I.otherEndMonth);
+    var rentEnd = parseYM(R.endMonth), h1RentEnd = parseYM(H1.rentEndMonth), h2RentEnd = parseYM(H2.rentEndMonth);
+    function within(idx, from, until) { return (from == null || idx >= from) && (until == null || idx <= until); }
 
     // state
     var salary = num(I.salaryMonthly), bonus = num(I.bonusAnnual), other = num(I.otherMonthly);
     var items = (inp.expenses.items || []).map(function (it) {
-      return { name: it.name, cur: num(it.monthly), g: num(it.growthPct), kind: it.kind || 'expense', holdingId: it.holdingId };
+      return { name: it.name, cur: num(it.monthly), g: num(it.growthPct), kind: it.kind || 'expense', holdingId: it.holdingId, from: parseYM(it.startMonth), until: parseYM(it.endMonth) };
     });
     var rent = num(R.monthly);
     var h1 = { owned: !!H1.owned, value: num(H1.value), rent: num(H1.rentMonthly), maint: num(H1.maintenanceMonthly) };
@@ -271,11 +275,13 @@
       }
 
       // ---- income ----
-      var bonusNow = cal === num(I.bonusMonth || 2) ? bonus : 0;
-      var h1Rent = h1.owned ? h1.rent : 0;
+      var working = within(idx, null, salEnd);
+      var salaryNow = working ? salary : 0, otherNow = within(idx, othFrom, othEnd) ? other : 0;
+      var bonusNow = working && cal === num(I.bonusMonth || 2) ? bonus : 0;
+      var h1Rent = h1.owned && within(idx, null, h1RentEnd) ? h1.rent : 0;
       if (h2.owned && H2.afterPossession === 'rentOut' && possIdx != null && h2.rentStartIdx == null && idx >= possIdx + num(H2.rentStartDelayMonths)) h2.rentStartIdx = idx;
-      var h2Rent = h2.rentStartIdx != null ? h2.rent : 0;
-      var income = salary + bonusNow + other + h1Rent + h2Rent;
+      var h2Rent = h2.rentStartIdx != null && within(idx, null, h2RentEnd) ? h2.rent : 0;
+      var income = salaryNow + bonusNow + otherNow + h1Rent + h2Rent;
 
       // ---- loan payments (on balance at start of month) ----
       var p2 = loan2.pay(idx, H2.loan.mode === 'preemi' && idx < preEmiUntil);
@@ -319,11 +325,12 @@
       // ---- outflows ----
       var living = 0, sip = 0;
       items.forEach(function (it) {
+        if (!within(idx, it.from, it.until)) return;
         if (it.kind === 'sip') { sip += it.cur; holdings[holdingIndex(it.holdingId)].bal += it.cur; }
         else living += it.cur;
       });
       var rentActive = buying ? idx <= pIdx : !(moveInHome2 && idx >= possIdx);
-      var rentPaid = rentActive ? rent : 0;
+      var rentPaid = rentActive && within(idx, null, rentEnd) ? rent : 0;
       var maint = (h1.owned ? h1.maint : 0) + (h2.owned && possIdx != null && idx >= possIdx ? h2.maint : 0) + (h3 && idx > pIdx ? h3.maint : 0);
       var maint3 = h3 && idx > pIdx ? h3.maint : 0;
       var oneOff = oneOffs[idx] || 0;
@@ -358,7 +365,7 @@
       var property = (h1.owned ? h1.value : 0) + (h2.owned ? h2.value : 0) + (h3 ? h3.value : 0);
       var loans = loan2.P + (loan3 ? loan3.P : 0);
 
-      row.salary = salary; row.bonus = bonusNow; row.otherIncome = other; row.h1Rent = h1Rent; row.h2Rent = h2Rent;
+      row.salary = salaryNow; row.bonus = bonusNow; row.otherIncome = otherNow; row.h1Rent = h1Rent; row.h2Rent = h2Rent;
       row.income = income;
       row.living = living; row.sip = sip; row.rent = rentPaid; row.emi2 = p2.pay; row.emi3 = p3.pay; row.maint = maint;
       row.int2 = p2.interest; row.int3 = p3.interest;
@@ -491,9 +498,11 @@
 
   /** Short meaningful name from a scenario's resolved inputs. */
   function autoName(inp, fmtShort) {
-    var p = inp.purchase;
+    var p = inp.purchase, se = parseYM(inp.income.salaryEndMonth);
+    var M = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    var work = se != null ? 'salary till ' + M[se % 12] + ' ' + Math.floor(se / 12) : null;
     if (!p.enabled) {
-      return inp.home2.afterPossession === 'moveIn' ? 'Keep renting, move to Home 2' : 'Keep renting';
+      return (inp.home2.afterPossession === 'moveIn' ? 'Keep renting, move to Home 2' : 'Keep renting') + (work ? ' · ' + work : '');
     }
     var bits = ['Buy'];
     if (p.sellHome1 && inp.home1.owned) bits.push('sell Home 1');
@@ -502,6 +511,7 @@
     var price = num(p.price);
     if (price > 0) bits.push(Math.round(num(p.downPayment) / price * 100) + '% down');
     bits.push(num(p.loanRatePct) + '% ' + num(p.tenureYears) + 'y');
+    if (work) bits.push(work);
     return bits.join(' · ');
   }
 
