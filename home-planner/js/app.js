@@ -242,13 +242,19 @@
     if (needs) b.innerHTML = '<span>Your planners live only in this browser. Download a backup file so you can load them again later or on another device.</span><span class="btn-row"><button class="btn primary" data-act="backup">Download backup</button><button class="btn ghost" data-act="hide-banner">Later</button></span>';
   }
 
+  function fillTipHints() {
+    var touch = window.matchMedia && (window.matchMedia('(hover: none)').matches || window.matchMedia('(pointer: coarse)').matches);
+    $$('[data-tiphint]').forEach(function (p) { p.textContent = (touch ? 'Tap' : 'Hover over or click') + ' any number or heading to see how it is calculated.'; });
+  }
   function render() {
+    if (T) T.hide();
     renderChrome();
     var p = planner();
     $$('.view').forEach(function (v) { v.hidden = true; });
     if (!p && ui.tab !== 'data') { var w = $('#view-welcome'); w.hidden = false; renderWelcome(w); return; }
     var view = $('#view-' + ui.tab); view.hidden = false;
     ({ scenarios: renderScenarios, profile: renderProfile, editor: renderEditor, compare: renderCompare, data: renderData })[ui.tab](view);
+    fillTipHints();
   }
 
   // =====================================================================
@@ -322,7 +328,8 @@
         '<div class="btn-row"><button class="btn primary" data-act="starter">Create starter scenarios</button><button class="btn" data-act="new-scenario">Pick a template</button></div></div>';
       el.innerHTML = html; return;
     }
-    html += '<div class="grid-cards">';
+    html += '<p class="tip-hint" data-tiphint></p><div class="grid-cards">';
+    T.reset('cards');
     p.scenarios.forEach(function (s) {
       var r = run(p.base, s.overrides), sm = r.res.summary, t = tierOf(r);
       var checked = p.ui.compareIds.indexOf(s.id) >= 0;
@@ -331,12 +338,12 @@
         '<div class="top"><h3>' + esc(scnName(p, s)) + '</h3><span class="pill ' + t.cls + '">' + t.label + '</span></div>' +
         '<div class="meta">Saved ' + dateStr(s.updatedAt) + (Object.keys(s.overrides).length ? ' · ' + Object.keys(s.overrides).length + ' change(s) from profile' : '') + '</div>' +
         '<div class="kv">' +
-        kv(r.res.buying ? 'New flat EMI' : 'New flat', r.res.buying ? f.short(sm.emi3) : 'Not buying') +
-        kv('Left / month, year 1', f.short(sm.avgSurplusFirstYear)) +
-        kv('Lowest savings', f.short(sm.minLiquid)) +
-        kv('Net worth in ' + r.inputs.settings.horizonYears + ' yrs', f.short(sm.endNetWorth)) +
-        (nwDelta != null ? kv('vs keep renting', (nwDelta >= 0 ? '+' : '') + f.short(nwDelta)) : '') +
-        kv('Tightest month', f.short(sm.minSurplus)) +
+        kv(r.res.buying ? 'New flat EMI' : 'New flat', r.res.buying ? f.short(sm.emi3) : 'Not buying', r.res.buying ? 'emi3' : null, r) +
+        kv('Left / month, year 1', f.short(sm.avgSurplusFirstYear), 'avgSurplusFirstYear', r) +
+        kv('Lowest savings', f.short(sm.minLiquid), 'minLiquid', r) +
+        kv('Net worth in ' + r.inputs.settings.horizonYears + ' yrs', f.short(sm.endNetWorth), 'endNetWorth', r) +
+        (nwDelta != null ? kv('vs keep renting', (nwDelta >= 0 ? '+' : '') + f.short(nwDelta), 'netWorthVsRent', r) : '') +
+        kv('Tightest month', f.short(sm.minSurplus), 'minSurplus', r) +
         '</div>' +
         '<div class="actions">' +
         '<button class="btn primary sm" data-act="open" data-id="' + s.id + '">Open</button>' +
@@ -351,7 +358,10 @@
   }
   /** Auto-named scenarios follow their current settings (e.g. after the profile price changes). */
   function scnName(p, s) { return s.nameAuto ? E.autoName(run(p.base, s.overrides).inputs) : s.name; }
-  function kv(k, v) { return '<div><div class="k">' + esc(k) + '</div><div class="v">' + esc(v) + '</div></div>'; }
+  function kv(k, v, tipKey, r) {
+    var a = tipKey ? T.attr('cards', function () { return explainMetric(tipKey, r); }) : '';
+    return '<div class="' + (tipKey ? 'has-tip' : '') + '"' + a + '><div class="k">' + esc(k) + '</div><div class="v">' + esc(v) + '</div></div>';
+  }
 
   async function newScenarioFlow() {
     var p = planner();
@@ -876,7 +886,7 @@
       '<div class="chart-box tall"><canvas id="mainChart" role="img" aria-label="Scenario chart"></canvas></div><div class="chart-note" id="chartNote"></div></div>' +
       '<div class="card"><div class="table-tools"><h3 style="margin:0;flex:1">Year by year</h3>' +
       '<div class="chart-tabs" style="margin:0"><button data-tm="yearly" aria-pressed="' + (ui.tableMode === 'yearly') + '">Yearly</button><button data-tm="monthly" aria-pressed="' + (ui.tableMode === 'monthly') + '">Monthly</button></div>' +
-      '<button class="btn sm" id="csvBtn">Download CSV</button></div><div class="table-wrap" id="resTable" style="max-height:480px"></div></div>';
+      '<button class="btn sm" id="csvBtn">Download CSV</button></div><p class="tip-hint" data-tiphint></p><div class="table-wrap" id="resTable" style="max-height:480px"></div></div>';
     $$('#chartTabs button', el).forEach(function (b) {
       b.addEventListener('click', function () {
         ui.chartTab = b.dataset.ct;
@@ -947,20 +957,21 @@
     // KPIs
     var t = tierOf(r), k = [];
     var pu = r.res.purchase;
+    T.reset('kpis');
     if (pu) {
-      k.push(kpi('Upfront cash needed', f.short(pu.upfront), 'Down ' + f.short(pu.down) + ' + costs ' + f.short(pu.upfront - pu.down), ''));
-      k.push(kpi('New flat EMI', f.short(pu.emi), 'Loan ' + f.short(pu.loan) + ' · ' + inp.purchase.tenureYears + ' yrs @ ' + pct(inp.purchase.loanRatePct), ''));
+      k.push(kpi('Upfront cash needed', f.short(pu.upfront), 'Down ' + f.short(pu.down) + ' + costs ' + f.short(pu.upfront - pu.down), '', 'upfront', r));
+      k.push(kpi('New flat EMI', f.short(pu.emi), 'Loan ' + f.short(pu.loan) + ' · ' + inp.purchase.tenureYears + ' yrs @ ' + pct(inp.purchase.loanRatePct), '', 'emi3', r));
       var pi = E.parseYM(pu.ym) + 1;
       var a = r.res.rows.find(function (x) { return x.idx === pi; }), b = r.cf.rows.find(function (x) { return x.idx === pi; });
       if (a && b) {
         var d = (a.committed - a.income) - (b.committed - b.income);
-        k.push(kpi('Net change in monthly outgo', (d >= 0 ? '+' : '') + f.short(d), 'After buying: new EMI & upkeep minus rent saved' + (r.res.sale ? ', plus Home 1 rent lost' : ''), d > 0 ? 'warn' : 'good'));
+        k.push(kpi('Net change in monthly outgo', (d >= 0 ? '+' : '') + f.short(d), 'After buying: new EMI & upkeep minus rent saved' + (r.res.sale ? ', plus Home 1 rent lost' : ''), d > 0 ? 'warn' : 'good', 'netOutgo', r));
       }
     }
-    if (s.emi2Peak > 0) k.push(kpi('Home 2 EMI', f.short(s.emi2Now) + ' → ' + f.short(s.emi2Peak), 'Peaks in ' + monthName(s.emi2PeakYM), ''));
-    k.push(kpi('Left each month (yr 1 avg)', f.short(s.avgSurplusFirstYear), 'Tightest: ' + f.short(s.minSurplus) + ' in ' + monthName(s.minSurplusYM), s.minSurplus < 0 ? 'warn' : ''));
-    k.push(kpi('Lowest savings', f.short(s.minLiquid), (s.minCover >= 99 ? '' : s.minCover.toFixed(1) + ' months of commitments · ') + monthName(s.minLiquidYM), t.cls === 'good' ? 'good' : t.cls));
-    k.push(kpi('Net worth in ' + inp.settings.horizonYears + ' yrs', f.short(s.endNetWorth), r.opp ? 'vs keep renting: ' + (r.opp.netWorthDiff >= 0 ? '+' : '') + f.short(r.opp.netWorthDiff) : 'Savings ' + f.short(s.endLiquid), r.opp ? (r.opp.netWorthDiff >= 0 ? 'good' : 'warn') : ''));
+    if (s.emi2Peak > 0) k.push(kpi('Home 2 EMI', f.short(s.emi2Now) + ' → ' + f.short(s.emi2Peak), 'Peaks in ' + monthName(s.emi2PeakYM), '', 'emi2', r));
+    k.push(kpi('Left each month (yr 1 avg)', f.short(s.avgSurplusFirstYear), 'Tightest: ' + f.short(s.minSurplus) + ' in ' + monthName(s.minSurplusYM), s.minSurplus < 0 ? 'warn' : '', 'avgSurplusFirstYear', r));
+    k.push(kpi('Lowest savings', f.short(s.minLiquid), (s.minCover >= 99 ? '' : s.minCover.toFixed(1) + ' months of commitments · ') + monthName(s.minLiquidYM), t.cls === 'good' ? 'good' : t.cls, 'minLiquid', r));
+    k.push(kpi('Net worth in ' + inp.settings.horizonYears + ' yrs', f.short(s.endNetWorth), r.opp ? 'vs keep renting: ' + (r.opp.netWorthDiff >= 0 ? '+' : '') + f.short(r.opp.netWorthDiff) : 'Savings ' + f.short(s.endLiquid), r.opp ? (r.opp.netWorthDiff >= 0 ? 'good' : 'warn') : '', 'netWorthVsRent', r));
     $('#resKpis', el).innerHTML = k.join('');
     var mk = $('#miniKpis');
     if (mk) mk.innerHTML = [
@@ -1002,7 +1013,10 @@
       $('#resTable', el).innerHTML = tableHtml(r);
     }
   }
-  function kpi(k, v, s, cls) { return '<div class="kpi ' + (cls || '') + '"><div class="k">' + esc(k) + '</div><div class="v">' + esc(v) + '</div><div class="s">' + esc(s) + '</div></div>'; }
+  function kpi(k, v, s, cls, tipKey, r) {
+    var a = tipKey ? T.attr('kpis', function () { return explainMetric(tipKey, r); }) : '';
+    return '<div class="kpi has-tip ' + (cls || '') + '"' + a + '><div class="k">' + esc(k) + (tipKey ? ' <span class="info-i" aria-hidden="true">i</span>' : '') + '</div><div class="v">' + esc(v) + '</div><div class="s">' + esc(s) + '</div></div>';
+  }
 
   var TABLE_COLS = [
     ['income', 'Income'], ['livingSip', 'Living & SIPs'], ['rent', 'Rent'], ['emis', 'Home EMIs'], ['maint', 'Maintenance'],
@@ -1023,19 +1037,217 @@
     }).map(function (o) { return o; });
   }
   function tableHtml(r) {
-    var f = fmt(), cols = TABLE_COLS.filter(function (c) { return !(ui.tableMode === 'monthly' && c[0] === 'avgSurplus'); });
+    var f = fmt(), monthly = ui.tableMode === 'monthly', cols = TABLE_COLS.filter(function (c) { return !(monthly && c[0] === 'avgSurplus'); });
+    var src = monthly ? r.res.rows : r.res.years;
     var rows = tableRows(r);
-    return '<table class="data"><thead><tr><th>' + (ui.tableMode === 'monthly' ? 'Month' : 'Year') + '</th>' + cols.map(function (c) { return '<th>' + c[1] + '</th>'; }).join('') + '</tr></thead><tbody>' +
-      rows.map(function (row) {
-        return '<tr><td>' + esc(row.label) + '</td>' + cols.map(function (c) { var v = row[c[0]]; return '<td class="' + (v < -0.5 ? 'neg' : '') + '" title="' + esc(f.full(v)) + '">' + (Math.abs(v) < 0.5 ? '–' : f.short(v)) + '</td>'; }).join('') + '</tr>';
-      }).join('') + '</tbody></table>' +
-      '<div class="chart-note" style="padding:0 10px 8px">Lump sums = builder payments you make, down payment & costs, one-time expenses and prepayments, minus any Home 1 sale proceeds.</div>';
+    T.reset('edTable');
+    return '<table class="data"><thead><tr><th' + headTip('edTable', 'period') + '>' + (monthly ? 'Month' : 'Year') + '</th>' + cols.map(function (c) { return '<th class="has-tip"' + headTip('edTable', c[0]) + '>' + c[1] + '</th>'; }).join('') + '</tr></thead><tbody>' +
+      rows.map(function (row, i) {
+        return '<tr><td>' + esc(row.label) + '</td>' + cols.map(function (c) {
+          var v = row[c[0]];
+          var a = T.attr('edTable', function () { return explainCell(c[0], src[i], i > 0 ? src[i - 1] : null, monthly, r); });
+          return '<td class="has-tip' + (v < -0.5 ? ' neg' : '') + '"' + a + '>' + (Math.abs(v) < 0.5 ? '–' : f.short(v)) + '</td>';
+        }).join('') + '</tr>';
+      }).join('') + '</tbody></table>';
   }
   function tableCsv(r) {
     var cols = TABLE_COLS.filter(function (c) { return !(ui.tableMode === 'monthly' && c[0] === 'avgSurplus'); });
     var lines = [[ui.tableMode === 'monthly' ? 'Month' : 'Year'].concat(cols.map(function (c) { return c[1]; })).join(',')];
     tableRows(r).forEach(function (row) { lines.push(['"' + row.label + '"'].concat(cols.map(function (c) { return Math.round(row[c[0]]); })).join(',')); });
     return lines.join('\n');
+  }
+
+  // =====================================================================
+  // Explanations (tooltips on numbers and headings)
+  // =====================================================================
+  var T = window.HBPTips;
+  /** Calculation block. lines: [sign, label, value] ; total: [label, value] */
+  function calc(lines, total) {
+    var f = fmt();
+    var h = '<table class="tip-calc">' + lines.filter(Boolean).map(function (l) {
+      return '<tr><td class="op">' + (l[0] || '') + '</td><td>' + esc(l[1]) + '</td><td class="amt">' + (typeof l[2] === 'number' ? esc(f.full(l[2])) : esc(l[2])) + '</td></tr>';
+    }).join('');
+    if (total) h += '<tr class="tot"><td class="op">=</td><td>' + esc(total[0]) + '</td><td class="amt">' + (typeof total[1] === 'number' ? esc(f.full(total[1])) : esc(total[1])) + '</td></tr>';
+    return h + '</table>';
+  }
+  function tip(title, sub, body, note) {
+    return '<div class="tip-title">' + esc(title) + '</div>' + (sub ? '<div class="tip-sub">' + esc(sub) + '</div>' : '') + (body || '') + (note ? '<div class="tip-note">' + note + '</div>' : '');
+  }
+  function nz(v) { return Math.abs(v) >= 0.5; }
+  function startLiquid(r) { return (+r.inputs.assets.cash || 0) + (r.inputs.assets.holdings || []).reduce(function (a, h) { return a + (+h.balance || 0); }, 0); }
+  function periodLabel(x, monthly) { return monthly ? monthName(x.ym) : (x.months < 12 ? x.year + ' (' + x.months + ' months in the projection)' : 'Year ' + x.year + ' (sum of 12 months)'); }
+
+  var COL_HELP = {
+    period: ['Period', 'Each row is one calendar year (or one month in Monthly view). Money flowing in or out is summed over the period; balances are as at the end of the period. The first and last years can be partial.'],
+    income: ['Income', 'Everything coming in: in-hand salary, the yearly bonus in its payout month, other income, rent from Home 1 (while you own it) and rent from Home 2 (once let out after possession). Salary and other income rise each year in the hike month; rents rise on their own schedules.'],
+    livingSip: ['Living & SIPs', 'Your monthly expense lines, each grown every January by its own rise % (or general inflation). SIP lines are included here as money leaving your account, but they are added to your investments, so they are saving, not spending.'],
+    rent: ['Rent', 'Rent for the flat you live in now. It rises by the renewal % in the renewal month and stops the month after you buy the new flat (or at Home 2 possession if you choose to move in there).'],
+    emis: ['Home EMIs', 'Home 2 EMI + new flat EMI. Home 2: the EMI is recalculated each time the bank disburses (or is interest-only until possession in pre-EMI mode). New flat: a fixed EMI starting the month after purchase. Each EMI = interest on the outstanding loan + principal repaid.'],
+    maint: ['Maintenance', 'Society maintenance and property tax you pay: Home 1 while you own it, Home 2 from possession, and the new flat after purchase. Grows with general inflation.'],
+    lump: ['Lump sums', 'One-off money out (minus one-off money in): builder demands you pay yourself + down payment, stamp duty, fees and other purchase costs + one-time expenses + loan prepayments − Home 1 sale proceeds. Not part of "left after commitments"; paid from savings.'],
+    surplus: ['Left after commitments', 'Income − (living & SIPs + rent + home EMIs + maintenance). What is left to save or spend on extras. Lump sums are not deducted here.'],
+    avgSurplus: ['Avg left / month', 'Left after commitments for the period ÷ number of months. The February bonus is spread across the year in this average.'],
+    committed: ['Commitments', 'Living & SIPs + rent + home EMIs + maintenance: the regular money that leaves every month.'],
+    liquid: ['Savings & investments (end)', 'Cash plus all investments at the end of the period. Moves by: what is left after commitments − lump sums + any Home 1 sale + SIPs added + interest and investment returns. Shortfalls are drawn from cash first, then investments.'],
+    loans: ['Loans (end)', 'Outstanding principal at the end of the period: Home 2 loan (grows with each bank disbursement, falls with principal repaid and prepayments) + new flat loan.'],
+    netWorth: ['Net worth (end)', 'Savings & investments + value of the homes you own (each growing at its appreciation rate) − loans outstanding.']
+  };
+  function headTip(scope, key) { var h = COL_HELP[key]; return h ? T.attr(scope, function () { return tip(h[0], 'What this column means', '', esc(h[1])); }) : ''; }
+
+  /** Explain one table cell. x = month or year row; prev = previous row (or null); r = run result. */
+  function explainCell(key, x, prev, monthly, r) {
+    var f = fmt(), per = periodLabel(x, monthly);
+    switch (key) {
+      case 'income':
+        return tip('Income', per, calc([
+          ['', 'Salary (in-hand)', x.salary], nz(x.bonus) && ['+', 'Bonus', x.bonus], nz(x.otherIncome) && ['+', 'Other income', x.otherIncome],
+          nz(x.h1Rent) && ['+', 'Home 1 rent', x.h1Rent], nz(x.h2Rent) && ['+', 'Home 2 rent', x.h2Rent]
+        ], ['Income', x.income]));
+      case 'livingSip':
+        return tip('Living & SIPs', per, calc([['', 'Living expenses', x.living], ['+', 'SIPs (go into investments)', x.sip]], ['Living & SIPs', x.living + x.sip]),
+          'Each expense line grows every January by its own rise % (blank = general inflation of ' + pct(+r.inputs.settings.inflationPct || 0) + ').');
+      case 'rent': {
+        var pu = r.res.purchase;
+        return tip('Rent', per, calc([['', 'Rent paid', x.rent]]), 'Rises ' + pct(+r.inputs.rent.escalationPct || 0) + ' each ' + S.CAL[(r.inputs.rent.renewalMonth || 1) - 1][1] + '.' + (pu ? ' Stops after ' + monthName(pu.ym) + ' when you buy.' : ''));
+      }
+      case 'emis':
+        return tip('Home EMIs', per, calc([
+          nz(x.emi2) && ['', 'Home 2 EMI', x.emi2], nz(x.emi2) && ['', '   of which interest', x.int2], nz(x.emi2) && ['', '   of which principal', x.emi2 - x.int2],
+          nz(x.emi3) && ['+', 'New flat EMI', x.emi3], nz(x.emi3) && ['', '   of which interest', x.int3], nz(x.emi3) && ['', '   of which principal', x.emi3 - x.int3]
+        ], ['Home EMIs', x.emi2 + x.emi3]), r.inputs.home2.loan.mode === 'preemi' ? 'Home 2 is interest-only (pre-EMI) until possession, then the full EMI starts.' : 'Home 2 EMI is recalculated on the amount disbursed so far over the remaining tenure.');
+      case 'maint':
+        return tip('Maintenance', per, calc([['', 'Maintenance & property tax', x.maint]]), 'Home 1 while owned + Home 2 from possession + new flat after purchase, growing with inflation.');
+      case 'lump':
+        return tip('Lump sums', per, calc([
+          ['', 'Builder demands you pay', x.h2Self], ['+', 'Down payment & purchase costs', x.upfront], ['+', 'One-time expenses', x.oneOff], ['+', 'Loan prepayments', x.prepay], ['−', 'Home 1 sale proceeds', x.saleProceeds]
+        ].filter(function (l) { return nz(l[2]); }), ['Lump sums', x.h2Self + x.upfront + x.oneOff + x.prepay - x.saleProceeds]), 'Paid from (or added to) savings; not part of "left after commitments".');
+      case 'surplus': case 'avgSurplus': case 'committed': {
+        var lines = [['', 'Income', x.income], ['−', 'Living & SIPs', x.living + x.sip], ['−', 'Rent', x.rent], ['−', 'Home EMIs', x.emi2 + x.emi3], ['−', 'Maintenance', x.maint]].filter(function (l, li) { return li === 0 || nz(l[2]); });
+        if (key === 'committed') return tip('Commitments', per, calc(lines.slice(1).map(function (l) { return ['+', l[1], l[2]]; }), ['Commitments', x.committed]));
+        var body = calc(lines, ['Left after commitments', x.surplus]);
+        if (key === 'avgSurplus' && !monthly) body += calc([['', 'Left after commitments', x.surplus], ['÷', 'Months', String(x.months)]], ['Average per month', x.avgSurplus]);
+        return tip(key === 'avgSurplus' ? 'Average left per month' : 'Left after commitments', per, body);
+      }
+      case 'liquid': {
+        var start = prev ? prev.liquid : startLiquid(r);
+        var lump = x.h2Self + x.upfront + x.oneOff + x.prepay;
+        var growth = x.liquid - start - x.net - x.sip;
+        return tip('Savings & investments', 'At end of ' + (monthly ? monthName(x.ym) : x.year), calc([
+          ['', prev ? 'At end of previous ' + (monthly ? 'month' : 'year') : 'Starting cash + investments', start],
+          ['+', 'Left after commitments', x.surplus], nz(lump) && ['−', 'Lump sums paid', lump], nz(x.saleProceeds) && ['+', 'Home 1 sale proceeds', x.saleProceeds],
+          nz(x.sip) && ['+', 'SIPs invested', x.sip], ['+', 'Interest & investment returns', growth]
+        ], ['Savings & investments', x.liquid]) + calc([['', 'Cash', x.cash], ['+', 'Investments', x.invested]], ['Total', x.liquid]),
+        'Cash above your "cash to keep aside" is moved into your first investment.');
+      }
+      case 'loans':
+        return tip('Loans outstanding', 'At end of ' + (monthly ? monthName(x.ym) : x.year), calc([['', 'Home 2 loan', x.loan2], ['+', 'New flat loan', x.loan3]], ['Loans', x.loans]),
+          'Principal repaid in this period: ' + esc(f.full((x.emi2 - x.int2) + (x.emi3 - x.int3))) + (nz(x.prepay) ? ', plus prepayments ' + esc(f.full(x.prepay)) : '') + '.');
+      case 'netWorth':
+        return tip('Net worth', 'At end of ' + (monthly ? monthName(x.ym) : x.year), calc([
+          ['', 'Savings & investments', x.liquid], nz(x.h1Value) && ['+', 'Home 1 value', x.h1Value], nz(x.h2Value) && ['+', 'Home 2 value', x.h2Value], nz(x.h3Value) && ['+', 'New flat value', x.h3Value],
+          nz(x.loan2) && ['−', 'Home 2 loan', x.loan2], nz(x.loan3) && ['−', 'New flat loan', x.loan3]
+        ], ['Net worth', x.netWorth]), 'Home values grow at their appreciation rates.');
+    }
+    return '';
+  }
+  function rowAt(r, ym) { return r.res.rows.find(function (x) { return x.ym === ym; }); }
+
+  var METRIC_HELP = {
+    upfront: 'Cash you must pay in the purchase month: down payment + stamp duty & registration + loan processing fee + other one-time costs. Lower is better.',
+    emi3: 'Monthly EMI on the new flat loan (price − down payment) at the loan rate over the tenure. Lower is better.',
+    peakEmi: 'The highest combined Home 2 + new flat EMI in any month of the projection. Lower is better.',
+    avgSurplusFirstYear: 'Average of "left after commitments" over the first 12 months. Higher is better.',
+    minSurplus: 'The single month with the least left after commitments (income − commitments). Negative means that month needs savings. Higher is better.',
+    avgSurplusLastYear: 'Average of "left after commitments" over the last 12 months of the projection. Higher is better.',
+    minLiquid: 'The lowest point of cash + investments over the projection, usually right after the down payment. Higher is safer.',
+    minCover: 'Savings & investments ÷ that month\'s commitments, at its lowest point: how many months you could keep paying everything with no income. Higher is safer.',
+    interest: 'Total interest paid on both home loans over the projection. Lower is better.',
+    rentPaid: 'Total rent paid for the flat you live in now over the projection. Lower is better.',
+    endLiquid: 'Cash + investments in the last month of the projection. Higher is better.',
+    endLoans: 'Loan principal still owed in the last month. Lower is better.',
+    endNetWorth: 'Savings & investments + home values − loans, in the last month. Higher is better.',
+    upfrontKpi: '', netOutgo: 'How much more (or less) leaves your account each month once you own the new flat, compared with the same month if you kept renting.',
+    emi2: 'Home 2 EMI in the first month of the projection and at its highest, as the bank keeps disbursing.'
+  };
+  /** Explain a summary measure for one scenario run. */
+  function explainMetric(key, r) {
+    var f = fmt(), s = r.res.summary, pu = r.res.purchase, x, n;
+    switch (key) {
+      case 'upfront':
+        if (!pu) return tip('Upfront cash needed', 'Not buying', '', 'This scenario does not buy the new flat.');
+        return tip('Upfront cash needed', 'In ' + monthName(pu.ym), calc([
+          ['', 'Down payment', pu.down], ['+', 'Stamp duty & registration (' + pct(+r.inputs.purchase.stampDutyPct || 0) + ' of ' + f.short(pu.price) + ')', pu.stamp],
+          ['+', 'Processing fee (' + pct(+r.inputs.purchase.processingFeePct || 0) + ' of loan)', pu.fee], ['+', 'Other costs', pu.other]
+        ], ['Upfront cash', pu.upfront]) + fundingCalc(r));
+      case 'emi3':
+        if (!pu) return tip('New flat EMI', 'Not buying', '', 'This scenario does not buy the new flat.');
+        n = Math.round((+r.inputs.purchase.tenureYears || 0) * 12);
+        return tip('New flat EMI', 'Fixed monthly payment', calc([
+          ['', 'Loan amount P = price − down payment', pu.loan], ['', 'Monthly rate r = ' + pct(+r.inputs.purchase.loanRatePct || 0) + ' ÷ 12', (Math.round(r.inputs.purchase.loanRatePct / 12 * 10000) / 10000) + '%'], ['', 'Months n', String(n)]
+        ], ['EMI', pu.emi]), 'EMI = P × r × (1+r)<sup>n</sup> ÷ ((1+r)<sup>n</sup> − 1). It starts the month after purchase.');
+      case 'peakEmi':
+        x = rowAt(r, s.peakEmiYM);
+        return tip('Peak total EMI', 'In ' + monthName(s.peakEmiYM), calc([['', 'Home 2 EMI', x.emi2], ['+', 'New flat EMI', x.emi3]], ['Total EMI', x.emi2 + x.emi3]));
+      case 'avgSurplusFirstYear': case 'avgSurplusLastYear': {
+        var rows = key === 'avgSurplusFirstYear' ? r.res.rows.slice(0, 12) : r.res.rows.slice(-12);
+        var sum = rows.reduce(function (a, q) { return a + q.surplus; }, 0);
+        return tip(key === 'avgSurplusFirstYear' ? 'Left per month, first year' : 'Left per month, final year', monthName(rows[0].ym) + ' to ' + monthName(rows[rows.length - 1].ym),
+          calc([['', 'Sum of "left after commitments"', sum], ['÷', 'Months', String(rows.length)]], ['Average per month', s[key]]), 'Includes the yearly bonus spread across the months.');
+      }
+      case 'minSurplus':
+        x = rowAt(r, s.minSurplusYM);
+        return tip('Tightest month', monthName(s.minSurplusYM), calc([['', 'Income', x.income], ['−', 'Living & SIPs', x.living + x.sip], ['−', 'Rent', x.rent], ['−', 'Home EMIs', x.emi2 + x.emi3], ['−', 'Maintenance', x.maint]].filter(function (l, li) { return li === 0 || nz(l[2]); }), ['Left after commitments', x.surplus]));
+      case 'minLiquid':
+        x = rowAt(r, s.minLiquidYM);
+        return tip('Lowest savings & investments', 'End of ' + monthName(s.minLiquidYM), calc([['', 'Cash', x.cash], ['+', 'Investments', x.invested]], ['Savings & investments', x.liquid]),
+          x.liquid < 0 ? 'Below zero means you would need to borrow or sell something to get through.' : '');
+      case 'minCover':
+        x = rowAt(r, s.minCoverYM);
+        return tip('Lowest cover', 'End of ' + monthName(s.minCoverYM), calc([['', 'Savings & investments', x.liquid], ['÷', 'Commitments that month', x.committed]], ['Months of cover', s.minCover >= 99 ? '–' : s.minCover.toFixed(1)]),
+          'Your safety-buffer target is ' + (+r.inputs.settings.emergencyMonths || 0) + ' months.');
+      case 'interest':
+        return tip('Loan interest paid', 'Whole projection', calc([['', 'Home 2 loan interest', r.res.totals.int2], ['+', 'New flat loan interest', r.res.totals.int3]], ['Total interest', r.res.totals.int2 + r.res.totals.int3]));
+      case 'rentPaid':
+        n = r.res.rows.filter(function (q) { return q.rent > 0; }).length;
+        return tip('Rent paid', 'Whole projection', calc([['', 'Months of rent', String(n)], ['', 'Starting rent', +r.inputs.rent.monthly || 0]], ['Total rent', r.res.totals.rentPaid]), 'Rent rises ' + pct(+r.inputs.rent.escalationPct || 0) + ' at each renewal.');
+      case 'endLiquid': case 'endLoans': case 'endNetWorth':
+        x = r.res.rows[r.res.rows.length - 1];
+        return explainCell({ endLiquid: 'liquid', endLoans: 'loans', endNetWorth: 'netWorth' }[key], x, r.res.rows[r.res.rows.length - 2], true, r);
+      case 'netOutgo': {
+        var i = E.parseYM(pu.ym) + 1;
+        var a = r.res.rows.find(function (q) { return q.idx === i; }), b = r.cf.rows.find(function (q) { return q.idx === i; });
+        return tip('Net change in monthly outgo', monthName(a.ym) + ', first month after buying', calc([
+          ['', 'Commitments − income if you buy', a.committed - a.income], ['−', 'Commitments − income if you keep renting', b.committed - b.income]
+        ], ['Change', (a.committed - a.income) - (b.committed - b.income)]) + calc([
+          ['+', 'New flat EMI', a.emi3], ['+', 'Extra maintenance', a.maint - b.maint], ['−', 'Rent no longer paid', b.rent - a.rent], ['+', 'Rental income given up', b.income - a.income]
+        ].filter(function (l) { return nz(l[2]); }), ['Change', (a.committed - a.income) - (b.committed - b.income)]), 'Positive means more money leaves each month than when renting.');
+      }
+      case 'emi2':
+        return tip('Home 2 EMI', 'Now and at its peak', calc([['', 'EMI in ' + monthName(s.start), s.emi2Now], ['', 'Highest EMI, in ' + monthName(s.emi2PeakYM), s.emi2Peak]]), esc(COL_HELP.emis[1]));
+      case 'netWorthVsRent': {
+        var o = r.opp;
+        if (!o) return explainMetric('endNetWorth', r);
+        return explainMetric('endNetWorth', r) + '<div class="tip-title" style="margin-top:10px">Compared with keep renting</div>' +
+          calc(o.parts.filter(function (p) { return nz(p.value); }).map(function (p) { return [p.value < 0 ? '−' : '+', p.label, Math.abs(p.value)]; }), ['Difference in net worth', o.netWorthDiff]);
+      }
+    }
+    return '';
+  }
+  function fundingCalc(r) {
+    var pu = r.res.purchase; if (!pu) return '';
+    return '<div class="tip-sub" style="margin-top:8px">Paid from</div>' + calc([
+      r.res.sale && ['', 'Home 1 sale', pu.fromSale], nz(pu.fromHoldings) && ['+', 'Investments you chose to redeem', pu.fromHoldings],
+      nz(pu.fromCash) && ['+', 'Cash & that month\'s income', pu.fromCash], nz(pu.autoDrawn) && ['+', 'Auto-redeemed investments', pu.autoDrawn]
+    ]);
+  }
+  function scenarioTip(r, name) {
+    var f = fmt(), i = r.inputs, p = i.purchase, t = tierOf(r);
+    var lines = p.enabled ? [
+      ['', 'Buys the new flat in', monthName(i.purchase.month)], ['', 'Price', +p.price || 0], ['', 'Down payment', +p.downPayment || 0],
+      ['', 'New loan', (r.res.purchase ? f.short(r.res.purchase.loan) : '–') + ' at ' + pct(+p.loanRatePct || 0) + ' for ' + p.tenureYears + ' yrs'],
+      ['', 'Home 1', p.sellHome1 && i.home1.owned ? 'Sold in ' + monthName(p.home1SaleMonth) : 'Kept and rented out']
+    ] : [['', 'New flat', 'Not bought (keep renting)'], ['', 'Home 2 after possession', { rentOut: 'Rented out', moveIn: 'Move in', vacant: 'Kept vacant' }[i.home2.afterPossession] || '']];
+    return tip(name, 'Scenario · ' + t.label, calc(lines), 'Projection ' + monthName(i.settings.startMonth) + ' for ' + i.settings.horizonYears + ' years.');
   }
 
   // =====================================================================
@@ -1081,15 +1293,18 @@
       '<p class="muted small" style="margin-top:8px">How this is chosen: options that never run out of savings and keep your ' + em + '-month buffer rank first; among those, the highest net worth at the end wins. It is a guide based on your assumptions, not financial advice.</p></div>';
 
     // metrics table
-    html += '<div class="card"><h3>Side by side</h3><div class="table-wrap"><table class="data"><thead><tr><th>Measure</th>' + sel.map(function (x) { return '<th><span class="swatch" style="background:var(--series-' + x.slot + ');margin-right:6px"></span>' + esc(x.name) + '</th>'; }).join('') + '</tr></thead><tbody>';
+    T.reset('cmp');
+    var scnHead = function (x) { return '<th class="has-tip"' + T.attr('cmp', function () { return scenarioTip(x.r, x.name); }) + '><span class="swatch" style="background:var(--series-' + x.slot + ');margin-right:6px"></span>' + esc(x.name) + '</th>'; };
+    html += '<div class="card"><h3>Side by side</h3><p class="tip-hint" data-tiphint></p><div class="table-wrap"><table class="data"><thead><tr><th class="has-tip"' + T.attr('cmp', tip('Measure', 'Rows', '', 'Each row is one summary measure for the whole projection. Green marks the best value in the row; tap a measure for what it means.')) + '>Measure</th>' + sel.map(scnHead).join('') + '</tr></thead><tbody>';
     CMP_METRICS.forEach(function (m) {
       var vals = sel.map(function (x) { return m[3](x.r); });
       if (vals.every(function (v) { return Math.abs(v) < 0.5; })) return;
       var bestV = m[2] ? Math.max.apply(null, vals) : Math.min.apply(null, vals);
       var distinct = vals.some(function (v) { return Math.abs(v - vals[0]) > 0.5; });
-      html += '<tr><td class="lbl-cell">' + esc(m[1]) + '</td>' + vals.map(function (v) {
+      html += '<tr><td class="lbl-cell has-tip"' + T.attr('cmp', tip(m[1], 'What this measure means', '', esc(METRIC_HELP[m[0]] || ''))) + '>' + esc(m[1]) + '</td>' + vals.map(function (v, vi) {
         var shown = m[4] === 'months' ? (v >= 99 ? '–' : v.toFixed(1)) : f.short(v);
-        return '<td class="' + (distinct && v === bestV ? 'best' : '') + (v < -0.5 ? ' neg' : '') + '">' + shown + '</td>';
+        var a = T.attr('cmp', function () { return explainMetric(m[0], sel[vi].r) + '<div class="tip-note">Scenario: ' + esc(sel[vi].name) + '</div>'; });
+        return '<td class="has-tip ' + (distinct && v === bestV ? 'best' : '') + (v < -0.5 ? ' neg' : '') + '"' + a + '>' + shown + '</td>';
       }).join('') + '</tr>';
     });
     html += '</tbody></table></div><p class="chart-note">Green marks the best value in each row.</p></div>';
@@ -1106,12 +1321,17 @@
       if (c[2] === 'line') C.compareLines(cv, items, c[0], f, c[0] === 'surplus'); else C.compareBars(cv, items, c[0], f);
     });
     function drawCmpTable() {
-      var key = ui.cmpTableKey;
+      var key = ui.cmpTableKey, ck = key === 'emis' ? 'emis' : key;
       var years = items[0].res.years;
-      $('#cmpTable', el).innerHTML = '<table class="data"><thead><tr><th>Year</th>' + sel.map(function (x) { return '<th><span class="swatch" style="background:var(--series-' + x.slot + ');margin-right:6px"></span>' + esc(x.name) + '</th>'; }).join('') + '</tr></thead><tbody>' +
+      T.reset('cmpYears');
+      var yHead = function (x) { return '<th class="has-tip"' + T.attr('cmpYears', function () { return scenarioTip(x.r, x.name); }) + '><span class="swatch" style="background:var(--series-' + x.slot + ');margin-right:6px"></span>' + esc(x.name) + '</th>'; };
+      $('#cmpTable', el).innerHTML = '<table class="data"><thead><tr><th class="has-tip"' + T.attr('cmpYears', function () { var h = COL_HELP[ck]; return tip('Year', 'Showing: ' + $('#cmpKey', el).selectedOptions[0].textContent, '', esc(COL_HELP.period[1]) + (h ? '<br><br><b>' + esc(h[0]) + ':</b> ' + esc(h[1]) : '')); }) + '>Year</th>' + sel.map(yHead).join('') + '</tr></thead><tbody>' +
         years.map(function (y, yi) {
           var vals = items.map(function (it) { return it.res.years[yi] ? it.res.years[yi][key] : 0; });
-          return '<tr><td>' + y.year + '</td>' + vals.map(function (v) { return '<td class="' + (v < -0.5 ? 'neg' : '') + '">' + f.short(v) + '</td>'; }).join('') + '</tr>';
+          return '<tr><td>' + y.year + '</td>' + vals.map(function (v, vi) {
+            var a = T.attr('cmpYears', function () { var ys = sel[vi].r.res.years; return ys[yi] ? explainCell(ck, ys[yi], yi > 0 ? ys[yi - 1] : null, false, sel[vi].r) + '<div class="tip-note">Scenario: ' + esc(sel[vi].name) + '</div>' : ''; });
+            return '<td class="has-tip' + (v < -0.5 ? ' neg' : '') + '"' + a + '>' + f.short(v) + '</td>';
+          }).join('') + '</tr>';
         }).join('') + '</tbody></table>';
     }
     $('#cmpKey', el).addEventListener('change', function (e) { ui.cmpTableKey = e.target.value; drawCmpTable(); });
