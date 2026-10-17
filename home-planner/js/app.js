@@ -886,7 +886,7 @@
       '<div class="chart-box tall"><canvas id="mainChart" role="img" aria-label="Scenario chart"></canvas></div><div class="chart-note" id="chartNote"></div></div>' +
       '<div class="card"><div class="table-tools"><h3 style="margin:0;flex:1">Year by year</h3>' +
       '<div class="chart-tabs" style="margin:0"><button data-tm="yearly" aria-pressed="' + (ui.tableMode === 'yearly') + '">Yearly</button><button data-tm="monthly" aria-pressed="' + (ui.tableMode === 'monthly') + '">Monthly</button></div>' +
-      '<button class="btn sm" id="csvBtn">Download CSV</button></div><p class="tip-hint" data-tiphint></p><div class="table-wrap" id="resTable" style="max-height:480px"></div></div>';
+      '<button class="btn sm" id="csvBtn">Download CSV</button></div><p class="tip-hint" data-tiphint></p><div class="chart-tabs tbl-groups" id="tblGroups" hidden></div><div class="table-wrap" id="resTable" style="max-height:480px"></div></div>';
     $$('#chartTabs button', el).forEach(function (b) {
       b.addEventListener('click', function () {
         ui.chartTab = b.dataset.ct;
@@ -1010,7 +1010,7 @@
         var dlt = r.opp.netWorthDiff;
         note.textContent = 'After ' + inp.settings.horizonYears + ' years, buying leaves you ' + f.short(Math.abs(dlt)) + (dlt >= 0 ? ' better off' : ' worse off') + ' than renting, and your savings & investments ' + (r.opp.liquidDiff >= 0 ? 'higher' : 'lower') + ' by ' + f.short(Math.abs(r.opp.liquidDiff)) + '. Blue helps, orange costs.';
       }
-      $('#resTable', el).innerHTML = tableHtml(r);
+      renderResTable(el, r);
     }
   }
   function kpi(k, v, s, cls, tipKey, r) {
@@ -1019,8 +1019,8 @@
   }
 
   var TABLE_COLS = [
-    ['income', 'Income'], ['livingSip', 'Living & SIPs'], ['rent', 'Rent'], ['emis', 'Home EMIs'], ['maint', 'Maintenance'],
-    ['lump', 'Lump sums'], ['surplus', 'Left after commitments'], ['avgSurplus', 'Avg left / month'],
+    ['income', 'Income'], ['livingSip', 'Living & SIPs'], ['rent', 'Rent'], ['emis', 'Home EMIs'], ['maint', 'Mainte&shy;nance'],
+    ['lump', 'Lump sums'], ['surplus', 'Left after commit&shy;ments'], ['avgSurplus', 'Avg left / month'],
     ['liquid', 'Savings & inv. (end)'], ['loans', 'Loans (end)'], ['netWorth', 'Net worth (end)']
   ];
   function tableRows(r) {
@@ -1028,7 +1028,7 @@
     var src = monthly ? r.res.rows : r.res.years;
     return src.map(function (x) {
       return {
-        label: monthly ? monthName(x.ym) : (x.months < 12 ? x.year + ' (' + x.months + ' mo)' : String(x.year)),
+        label: monthly ? monthName(x.ym) : (x.months < 12 ? x.year + ' (' + x.months + '\u00a0mo)' : String(x.year)),
         income: x.income, livingSip: x.living + x.sip, rent: x.rent, emis: x.emi2 + x.emi3, maint: x.maint,
         lump: x.h2Self + x.upfront + x.oneOff + x.prepay - x.saleProceeds,
         surplus: x.surplus, avgSurplus: monthly ? x.surplus : x.avgSurplus,
@@ -1036,14 +1036,37 @@
       };
     }).map(function (o) { return o; });
   }
-  function tableHtml(r) {
+  // On narrow screens the year table shows one group of columns at a time instead of scrolling sideways
+  var TABLE_GROUPS = [
+    ['flow', 'Income & living', ['income', 'livingSip', 'rent']],
+    ['emi', 'EMIs & lump sums', ['emis', 'maint', 'lump']],
+    ['left', 'Left & savings', ['surplus', 'avgSurplus', 'liquid']],
+    ['bal', 'Loans & net worth', ['loans', 'netWorth']]
+  ];
+  function renderResTable(el, r) {
+    var wrap = $('#resTable', el), bar = $('#tblGroups', el);
+    var fits = function () { var t = wrap.firstElementChild; return wrap.clientWidth ? t.scrollWidth <= wrap.clientWidth + 2 : window.innerWidth >= 700; };
+    wrap.innerHTML = tableHtml(r, null);
+    if (fits()) { bar.hidden = true; return; }
+    var g = ui.tableGroup || 'flow';
+    bar.hidden = false;
+    bar.innerHTML = TABLE_GROUPS.map(function (x) { return '<button data-tg="' + x[0] + '" aria-pressed="' + (x[0] === g) + '">' + x[1] + '</button>'; }).join('');
+    $$('[data-tg]', bar).forEach(function (b) {
+      b.addEventListener('click', function () { ui.tableGroup = b.dataset.tg; renderResTable(el, run(planner().base, ui.editor.overrides)); });
+    });
+    wrap.innerHTML = tableHtml(r, g);
+  }
+  function tableHtml(r, group) {
     var f = fmt(), monthly = ui.tableMode === 'monthly', cols = TABLE_COLS.filter(function (c) { return !(monthly && c[0] === 'avgSurplus'); });
+    var gcols = group && TABLE_GROUPS.find(function (x) { return x[0] === group; });
+    if (gcols) cols = cols.filter(function (c) { return gcols[2].indexOf(c[0]) >= 0; });
     var src = monthly ? r.res.rows : r.res.years;
     var rows = tableRows(r);
     T.reset('edTable');
     return '<table class="data"><thead><tr><th' + headTip('edTable', 'period') + '>' + (monthly ? 'Month' : 'Year') + '</th>' + cols.map(function (c) { return '<th class="has-tip"' + headTip('edTable', c[0]) + '>' + c[1] + '</th>'; }).join('') + '</tr></thead><tbody>' +
       rows.map(function (row, i) {
-        return '<tr><td>' + esc(row.label) + '</td>' + cols.map(function (c) {
+        var lab = group && monthly ? row.label.replace(/ \d\d(\d\d)$/, ' $1') : row.label;
+        return '<tr><td>' + esc(lab) + '</td>' + cols.map(function (c) {
           var v = row[c[0]];
           var a = T.attr('edTable', function () { return explainCell(c[0], src[i], i > 0 ? src[i - 1] : null, monthly, r); });
           return '<td class="has-tip' + (v < -0.5 ? ' neg' : '') + '"' + a + '>' + (Math.abs(v) < 0.5 ? '–' : f.short(v)) + '</td>';
@@ -1052,7 +1075,7 @@
   }
   function tableCsv(r) {
     var cols = TABLE_COLS.filter(function (c) { return !(ui.tableMode === 'monthly' && c[0] === 'avgSurplus'); });
-    var lines = [[ui.tableMode === 'monthly' ? 'Month' : 'Year'].concat(cols.map(function (c) { return c[1]; })).join(',')];
+    var lines = [[ui.tableMode === 'monthly' ? 'Month' : 'Year'].concat(cols.map(function (c) { return c[1].replace('&shy;', ''); })).join(',')];
     tableRows(r).forEach(function (row) { lines.push(['"' + row.label + '"'].concat(cols.map(function (c) { return Math.round(row[c[0]]); })).join(',')); });
     return lines.join('\n');
   }
@@ -1310,7 +1333,7 @@
 
     // metrics table
     T.reset('cmp');
-    var scnHead = function (x) { return '<th class="has-tip"' + T.attr('cmp', function () { return scenarioTip(x.r, x.name); }) + '><span class="swatch" style="background:var(--series-' + x.slot + ');margin-right:6px"></span>' + esc(x.name) + '</th>'; };
+    var scnHead = function (x) { return '<th class="has-tip"' + T.attr('cmp', function () { return scenarioTip(x.r, x.name); }) + '><span class="swatch" style="background:var(--series-' + x.slot + ');margin-right:6px"></span>' + scnHeadName(x.name) + '</th>'; };
     html += '<div class="card"><h3>Side by side</h3><p class="tip-hint" data-tiphint></p><div class="table-wrap"><table class="data"><thead><tr><th class="has-tip"' + T.attr('cmp', tip('Measure', 'Rows', '', 'Each row is one summary measure for the whole projection. Green marks the best value in the row; tap a measure for what it means.')) + '>Measure</th>' + sel.map(scnHead).join('') + '</tr></thead><tbody>';
     CMP_METRICS.forEach(function (m) {
       var vals = sel.map(function (x) { return m[3](x.r); });
@@ -1340,7 +1363,7 @@
       var key = ui.cmpTableKey, ck = key === 'emis' ? 'emis' : key;
       var years = items[0].res.years;
       T.reset('cmpYears');
-      var yHead = function (x) { return '<th class="has-tip"' + T.attr('cmpYears', function () { return scenarioTip(x.r, x.name); }) + '><span class="swatch" style="background:var(--series-' + x.slot + ');margin-right:6px"></span>' + esc(x.name) + '</th>'; };
+      var yHead = function (x) { return '<th class="has-tip"' + T.attr('cmpYears', function () { return scenarioTip(x.r, x.name); }) + '><span class="swatch" style="background:var(--series-' + x.slot + ');margin-right:6px"></span>' + scnHeadName(x.name) + '</th>'; };
       $('#cmpTable', el).innerHTML = '<table class="data"><thead><tr><th class="has-tip"' + T.attr('cmpYears', function () { var h = COL_HELP[ck]; return tip('Year', 'Showing: ' + $('#cmpKey', el).selectedOptions[0].textContent, '', esc(COL_HELP.period[1]) + (h ? '<br><br><b>' + esc(h[0]) + ':</b> ' + esc(h[1]) : '')); }) + '>Year</th>' + sel.map(yHead).join('') + '</tr></thead><tbody>' +
         years.map(function (y, yi) {
           var vals = items.map(function (it) { return it.res.years[yi] ? it.res.years[yi][key] : 0; });
@@ -1353,6 +1376,8 @@
     $('#cmpKey', el).addEventListener('change', function (e) { ui.cmpTableKey = e.target.value; drawCmpTable(); });
     drawCmpTable();
   }
+  /** Scenario names as table headings: break at the " · " separators so long auto names stack instead of widening the table. */
+  function scnHeadName(name) { return '<span class="th-name">' + String(name).split(' · ').map(esc).join(' ·<wbr> ') + '</span>'; }
   function toggleCompare(id, on) {
     var p = planner(), ids = p.ui.compareIds;
     var i = ids.indexOf(id);

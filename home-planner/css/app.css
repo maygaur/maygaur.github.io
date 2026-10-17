@@ -307,14 +307,28 @@ input::placeholder { color: var(--text-muted); opacity: .8; }
 /* ---------- tables ---------- */
 .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; border: 1px solid var(--border); border-radius: 10px; }
 table.data { border-collapse: collapse; width: 100%; font-size: .84rem; font-variant-numeric: tabular-nums; }
-table.data th, table.data td { padding: 7px 10px; text-align: right; white-space: nowrap; border-bottom: 1px solid var(--border); }
+table.data th, table.data td { padding: 7px 8px; text-align: right; white-space: nowrap; border-bottom: 1px solid var(--border); }
 table.data th { background: var(--surface-2); font-weight: 600; color: var(--text-secondary); position: sticky; top: 0; }
 table.data th:first-child, table.data td:first-child { text-align: left; position: sticky; left: 0; background: var(--surface-1); z-index: 1; }
 table.data th:first-child { background: var(--surface-2); z-index: 2; }
 table.data tr:last-child td { border-bottom: 0; }
 table.data td.neg { color: var(--bad); }
 table.data td.best { background: var(--good-soft); font-weight: 700; }
-table.data td.lbl-cell { white-space: normal; min-width: 160px; }
+table.data td.lbl-cell { white-space: normal; min-width: 150px; }
+/* headings wrap so long labels don't widen the table; numbers stay on one line */
+table.data th { white-space: normal; vertical-align: bottom; line-height: 1.25; min-width: 56px; }
+table.data th:first-child { min-width: 0; }
+table.data td:first-child { white-space: normal; }
+table.data th { -webkit-hyphens: manual; hyphens: manual; }
+table.data th .th-name { display: inline; }
+.tbl-groups { margin: 0 0 8px; }
+@media (max-width: 640px) {
+  table.data { font-size: .78rem; }
+  table.data th, table.data td { padding: 6px 6px; }
+  table.data th { font-size: .72rem; min-width: 0; }
+  table.data td.lbl-cell { min-width: 96px; max-width: 132px; }
+  table.data th:not(:first-child) { min-width: 66px; }
+}
 .table-tools { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; flex-wrap: wrap; }
 
 /* ---------- compare ---------- */
