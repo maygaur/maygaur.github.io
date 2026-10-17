@@ -106,7 +106,7 @@
         if (changed) return { conflict: true };
         var call = cfg.gistId
           ? req('PATCH', '/gists/' + encodeURIComponent(cfg.gistId), { files: files })
-          : req('POST', '/gists', { description: 'Home Buying Planner data (secret gist, do not share the link)', public: false, files: files });
+          : req('POST', '/gists', { description: 'Home Buying Planner data (secret gist: anyone with the link can read it)', public: false, files: files });
         return call.then(function (r) {
           if (!r.ok) throw new Error(errText(r, 'write the gist'));
           cfg.gistId = r.json.id;
@@ -183,5 +183,5 @@
     };
   }
 
-  root.HBPSync = { create: create, _b64encode: b64encode, _b64decode: b64decode };
+  root.HBPSync = { create: create, hash: hash, FILE: 'home-planner-data.json', _b64encode: b64encode, _b64decode: b64decode };
 })(this);

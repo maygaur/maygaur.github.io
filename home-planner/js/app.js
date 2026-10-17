@@ -2,7 +2,13 @@
 (function () {
   'use strict';
   var E = window.HBPEngine, S = window.HBPSchema, C = window.HBPCharts;
-  var STORE_KEY = 'homeBuyingPlanner.v1';
+  // A link with #share=<github user>/<gist id> opens a read-only copy of that gist's planners.
+  // The copy lives under its own storage key and never syncs, so viewers' edits stay in their browser.
+  var SHARE = (function () {
+    var m = /[#&?]share=([A-Za-z0-9-]+)\/([0-9a-fA-F]{8,64})/.exec(location.hash + '&' + location.search);
+    return m ? { owner: m[1], id: m[2].toLowerCase() } : null;
+  })();
+  var STORE_KEY = SHARE ? 'homeBuyingPlanner.share.' + SHARE.id : 'homeBuyingPlanner.v1';
   var APP_TAG = 'home-buying-planner';
   var MAX_COMPARE = 3;
 
@@ -232,6 +238,7 @@
   function renderBanner() {
     var b = $('#backupBanner');
     if (!b) return;
+    if (SHARE) { renderShareBanner(b); return; }
     var needs = !ui.bannerHidden && !(sync && sync.configured()) && db.planners.some(function (p) { return p.scenarios.length && (!db.lastBackupAt || p.updatedAt > db.lastBackupAt); });
     if (!storageOk) {
       b.hidden = false;
@@ -251,6 +258,7 @@
     renderChrome();
     var p = planner();
     $$('.view').forEach(function (v) { v.hidden = true; });
+    if (!p && SHARE && ui.tab !== 'data') { var w0 = $('#view-welcome'); w0.hidden = false; renderShareWait(w0); return; }
     if (!p && ui.tab !== 'data') { var w = $('#view-welcome'); w.hidden = false; renderWelcome(w); return; }
     var view = $('#view-' + ui.tab); view.hidden = false;
     ({ scenarios: renderScenarios, profile: renderProfile, editor: renderEditor, compare: renderCompare, data: renderData })[ui.tab](view);
@@ -1393,7 +1401,7 @@
   // =====================================================================
   function renderData(el) {
     var cur = planner();
-    var html = '<div class="view-head"><div class="grow"><h1>Your data</h1><p>' + (sync && sync.configured() ? 'Stored in this browser and synced to your secret GitHub gist.' : 'Everything is stored only in this browser. Export to a file or turn on GitHub sync to keep a backup and use it on other devices.') + '</p></div></div>';
+    var html = SHARE ? '<div class="view-head"><div class="grow"><h1>Your data</h1><p>This is a read-only shared copy. Anything you change is kept only in this browser and never reaches the person who shared it.</p></div></div>' : '<div class="view-head"><div class="grow"><h1>Your data</h1><p>' + (sync && sync.configured() ? 'Stored in this browser and synced to your secret GitHub gist.' : 'Everything is stored only in this browser. Export to a file or turn on GitHub sync to keep a backup and use it on other devices.') + '</p></div></div>';
     html += '<div class="card"><div class="table-tools"><h2 style="margin:0;flex:1">Planners</h2><button class="btn primary sm" data-act="new-planner">+ New planner</button></div>';
     if (!db.planners.length) html += '<p class="muted">No planners yet.</p>';
     html += db.planners.map(function (p) {
@@ -1410,12 +1418,12 @@
     if (cur) {
       html += '<div class="card"><h2>Planner settings</h2><div class="field" style="max-width:360px"><label for="curSel">Currency for "' + esc(cur.name) + '"</label><div class="inp-wrap"><select id="curSel">' + CURRENCIES.map(function (c) { return '<option value="' + c[0] + '"' + (c[0] === cur.currency ? ' selected' : '') + '>' + esc(c[1]) + '</option>'; }).join('') + '</select></div><div class="help">Changes the display only; amounts are not converted.</div></div></div>';
     }
-    html += syncCardHtml();
+    html += SHARE ? shareCardHtml() : syncCardHtml();
     html += '<div class="card"><h2>Backup & restore</h2><p class="muted small">Last backup downloaded: ' + (db.lastBackupAt ? dateStr(db.lastBackupAt) : 'never') + '</p>' +
       '<div class="btn-row"><button class="btn primary" data-act="backup">Export all planners</button><button class="btn" data-act="import">Import from file</button></div>' +
       '<p class="muted small" style="margin-top:8px">Importing adds the planners from the file. If a planner already exists you can replace it or keep both.</p></div>';
     html += '<div class="card"><h2>Appearance</h2><div class="field" style="max-width:360px"><label for="themeSel">Theme</label><div class="inp-wrap"><select id="themeSel"><option value="auto">Match my device</option><option value="light">Light</option><option value="dark">Dark</option></select></div></div></div>';
-    html += '<div class="card"><h2>Reset</h2><p class="muted small">Deletes every planner and scenario from this browser. Export first if you might want them back.</p><button class="btn danger" data-act="reset-all">Delete everything</button></div>';
+    if (!SHARE) html += '<div class="card"><h2>Reset</h2><p class="muted small">Deletes every planner and scenario from this browser. Export first if you might want them back.</p><button class="btn danger" data-act="reset-all">Delete everything</button></div>';
     el.innerHTML = html;
     var cs = $('#curSel', el);
     if (cs) cs.addEventListener('change', function () { cur.currency = cs.value; touch(cur); save(); toast('Currency set to ' + cs.value); });
@@ -1483,7 +1491,7 @@
     var c = sync && sync.config();
     var h = '<div class="card" id="syncCard"><h2>Sync with GitHub</h2>';
     if (!c) {
-      h += '<p class="muted small">Optional. Saves all your planners to a <b>secret gist</b> on your GitHub account so your PC and phone stay in step, and GitHub keeps every version. The token stays in this browser and is only sent to GitHub. A secret gist is unlisted, not locked: anyone who gets its link can read it, so never share the link.</p>' +
+      h += '<p class="muted small">Optional. Saves all your planners to a <b>secret gist</b> on your GitHub account so your PC and phone stay in step, and GitHub keeps every version. The token stays in this browser and is only sent to GitHub. A secret gist is unlisted, not locked: anyone who gets its link can read it. Once connected you can create a read-only link to share with people you trust.</p>' +
         '<ol class="steps"><li>Create a <a href="https://github.com/settings/tokens/new?scopes=gist&description=Home%20Buying%20Planner" target="_blank" rel="noopener">GitHub token with only the <code>gist</code> scope</a> (the link pre-selects it). Pick an expiry, then Generate and copy it.</li>' +
         '<li>Paste it below and connect. The first device creates the gist; other devices find it automatically with the same token.</li></ol>' +
         '<div class="field"><label for="syToken">Token</label><div class="inp-wrap"><input id="syToken" type="password" autocomplete="off" placeholder="ghp_… or github_pat_…"></div></div>' +
@@ -1496,6 +1504,7 @@
         '<p class="small"><span class="pill ' + (st === 'synced' ? 'good' : st === 'error' || st === 'conflict' ? 'bad' : 'warn') + '">' + esc(SYNC_LABELS[st] || 'Not synced yet') + '</span> ' +
         (st === 'error' ? esc(syncState.detail || '') : c.syncedAt ? '<span class="muted">Last synced ' + dateStr(c.syncedAt) + '</span>' : '') +
         (st === 'pending' ? ' <span class="muted">Newer data is waiting on GitHub; save or discard your open scenario to load it.</span>' : '') + '</p>' +
+        (c.gistId ? shareLinkHtml(c) : '') +
         '<label class="switch" style="margin:8px 0 12px"><input type="checkbox" id="syAuto"' + (c.auto ? ' checked' : '') + '> Sync automatically after every change</label>' +
         '<div class="btn-row"><button class="btn primary" id="sySync">Sync now</button>' + (url ? '<a class="btn" href="' + url + '/revisions" target="_blank" rel="noopener">Version history</a>' : '') + '<button class="btn danger" id="syOff">Disconnect this device</button></div>' +
         '<p class="muted small" style="margin-top:8px">Disconnecting removes the token from this browser only. Your data stays in the gist and in this browser.</p>';
@@ -1518,6 +1527,7 @@
       if (syncState.state === 'synced') toast('Connected to GitHub');
       if (ui.tab === 'data') render();
     });
+    var cp = $('#shCopy', el); if (cp) cp.addEventListener('click', function () { copyText($('#shLink', el).value); });
     var s1 = $('#sySync', el); if (s1) s1.addEventListener('click', function () { sync.sync('manual'); });
     var a1 = $('#syAuto', el); if (a1) a1.addEventListener('change', function () { sync.setAuto(a1.checked); });
     var o1 = $('#syOff', el); if (o1) o1.addEventListener('click', async function () {
@@ -1552,6 +1562,116 @@
     if (sync.configured()) { setSyncStatus('syncing'); sync.sync('start'); }
     document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') sync.maybePull(); });
     window.addEventListener('online', function () { sync.sync('online'); });
+  }
+
+  // =====================================================================
+  // Read-only shared view
+  // =====================================================================
+  function shareLinkHtml(c) {
+    var link = location.origin + location.pathname + '#share=' + encodeURIComponent(c.login || '') + '/' + encodeURIComponent(c.gistId);
+    return '<div class="share-box"><h3>Share a read-only link</h3>' +
+      '<p class="muted small">Anyone with this link sees your latest synced planners and can explore, tweak and compare scenarios in their own browser. Nothing they do is saved back to your gist or affects you. The link gives read access to your data, so share it only with people you trust.</p>' +
+      '<div class="share-row"><input id="shLink" type="text" readonly value="' + esc(link) + '" aria-label="Read-only link"><button class="btn sm" id="shCopy" type="button">Copy link</button></div></div>';
+  }
+  function copyText(t) {
+    var done = function () { toast('Link copied'); };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(t).then(done, fallback); else fallback();
+    function fallback() { var i = $('#shLink'); if (i) { i.focus(); i.select(); try { document.execCommand('copy'); done(); } catch (e) { toast('Select the link and copy it'); } } }
+  }
+  function sharedHash() {
+    // compare ignores per-viewer UI state such as which scenarios are ticked for comparison
+    return HBPSync.hash(JSON.stringify(db.planners.map(function (p) { return Object.assign({}, p, { ui: undefined }); })));
+  }
+  function shareChanged() { return !!(db.share && db.share.hash && sharedHash() !== db.share.hash); }
+  async function fetchShared() {
+    var FILE = HBPSync.FILE, res = null;
+    try {
+      var r = await fetch('https://api.github.com/gists/' + SHARE.id, { headers: { Accept: 'application/vnd.github+json' }, cache: 'no-store' });
+      if (r.status === 404) throw Object.assign(new Error('This shared plan no longer exists, or the link is incomplete.'), { final: true });
+      if (!r.ok) throw new Error('GitHub ' + r.status);
+      var j = await r.json(), f = j.files && j.files[FILE];
+      if (!f) throw Object.assign(new Error('The shared link does not point to a Home Buying Planner file.'), { final: true });
+      var text = f.truncated ? await (await fetch(f.raw_url, { cache: 'no-store' })).text() : f.content;
+      res = { text: text, version: j.history && j.history[0] ? j.history[0].version : j.updated_at, updatedAt: j.updated_at };
+    } catch (e) {
+      if (e.final) throw e;
+      // the API allows 60 unsigned requests an hour per network; the raw file is the fallback
+      var r2 = await fetch('https://gist.githubusercontent.com/' + SHARE.owner + '/' + SHARE.id + '/raw/' + FILE, { cache: 'no-store' });
+      if (!r2.ok) throw new Error(r2.status === 404 ? 'This shared plan no longer exists, or the link is incomplete.' : 'Could not reach GitHub (' + r2.status + ').');
+      var t2 = await r2.text();
+      res = { text: t2, version: 'h' + HBPSync.hash(t2), updatedAt: null };
+    }
+    var data;
+    try { data = JSON.parse(res.text); } catch (e) { throw new Error('The shared file is not valid planner data.'); }
+    if (!data || !Array.isArray(data.planners)) throw new Error('The shared file is not a Home Buying Planner file.');
+    res.planners = data.planners;
+    return res;
+  }
+  function applyShared(res) {
+    var keepUi = {};
+    db.planners.forEach(function (p) { keepUi[p.id] = p.ui; });
+    db.planners = res.planners.map(function (p) { p = upgradePlanner(E.clone(p));
+      if (keepUi[p.id]) p.ui = keepUi[p.id];
+      p.ui.compareIds = (p.ui.compareIds || []).filter(function (id) { return p.scenarios.some(function (x) { return x.id === id; }); });
+      return p;
+    });
+    if (!db.planners.some(function (p) { return p.id === db.activePlannerId; })) db.activePlannerId = db.planners[0] ? db.planners[0].id : null;
+    if (ui.editor && (!planner() || (ui.editor.scenarioId && !planner().scenarios.some(function (x) { return x.id === ui.editor.scenarioId; })))) ui.editor = null;
+    db.share = { version: res.version, hash: null, loadedAt: new Date().toISOString(), updatedAt: res.updatedAt };
+    db.share.hash = sharedHash();
+    ui.shareNewer = null;
+    try { localStorage.setItem(STORE_KEY, JSON.stringify(db)); } catch (e) { /* private mode: still works for this visit */ }
+    runCache.clear();
+  }
+  var shareCheckedAt = 0;
+  async function loadShared(force) {
+    shareCheckedAt = Date.now();
+    var had = db.planners.length;
+    if (!had) { ui.shareState = 'loading'; render(); }
+    try {
+      var res = await fetchShared();
+      ui.shareState = 'ok'; ui.shareError = null;
+      var newer = !db.share || res.version !== db.share.version;
+      if (force || !had) { applyShared(res); render(); if (force) toast('Loaded the latest shared version'); }
+      else if (newer) {
+        if (!shareChanged() && !(ui.editor && ui.editor.dirty)) { applyShared(res); render(); toast('Updated to the latest shared version'); }
+        else { ui.shareNewer = res; renderBanner(); }
+      } else renderBanner();
+    } catch (e) {
+      ui.shareState = had ? 'stale' : 'error';
+      ui.shareError = e && e.message ? e.message : 'Could not reach GitHub.';
+      if (had) renderBanner(); else render();
+    }
+  }
+  function initShare() {
+    ui.shareState = db.planners.length ? 'ok' : 'loading';
+    loadShared(false);
+    document.addEventListener('visibilitychange', function () {
+      if (document.visibilityState === 'visible' && Date.now() - shareCheckedAt > 120000) loadShared(false);
+    });
+  }
+  function renderShareWait(el) {
+    var err = ui.shareState === 'error';
+    el.innerHTML = '<div class="welcome card"><h1>' + (err ? 'Could not open the shared plan' : 'Opening the shared plan…') + '</h1>' +
+      '<p class="muted">' + (err ? esc(ui.shareError || '') : 'Loading the latest version from GitHub.') + '</p>' +
+      (err ? '<div class="btn-row"><button class="btn primary" data-act="share-latest">Try again</button></div>' : '') + '</div>';
+  }
+  function renderShareBanner(b) {
+    b.hidden = false;
+    b.classList.add('share');
+    var h = '<span class="grow"><b>Read-only shared view.</b> Explore and change anything; it stays in this browser and never reaches the owner.';
+    if (ui.shareNewer) h += ' <b>The owner has updated the plan.</b>';
+    else if (ui.shareState === 'stale') h += ' <span class="muted">Showing the copy saved here: ' + esc(ui.shareError || '') + '</span>';
+    h += '</span><span class="btn-row">';
+    if (ui.shareNewer) h += '<button class="btn primary" data-act="share-latest">Load latest (replaces my changes)</button><button class="btn ghost" data-act="share-keep">Keep mine</button>';
+    else if (db.planners.length && shareChanged()) h += '<button class="btn" data-act="share-reset">Discard my changes</button>';
+    b.innerHTML = h + '</span>';
+  }
+  function shareCardHtml() {
+    var s = db.share || {};
+    return '<div class="card"><h2>Shared plan</h2><p class="small">Loaded from <b>' + esc(SHARE.owner) + '</b>\'s shared link' + (s.updatedAt ? ', last updated by them ' + dateStr(s.updatedAt) : '') + (s.loadedAt ? '. Checked ' + dateStr(s.loadedAt) : '') + '.</p>' +
+      '<p class="muted small">New versions load automatically when you have not changed anything. If you have, you are asked first.</p>' +
+      '<div class="btn-row"><button class="btn primary" data-act="share-latest">Check for the latest version</button>' + (shareChanged() ? '<button class="btn danger" data-act="share-reset">Discard my changes</button>' : '') + '</div></div>';
   }
 
   // =====================================================================
@@ -1642,6 +1762,11 @@
         }
         break;
       }
+      case 'share-latest': if (await guardDirty()) loadShared(true); break;
+      case 'share-reset':
+        if (await confirmBox('Discard your changes?', 'This replaces everything in this shared copy with the latest version from the owner. Your own scenarios here will be removed.', 'Discard and reload', true)) { ui.editor = null; loadShared(true); }
+        break;
+      case 'share-keep': ui.shareNewer = null; renderBanner(); break;
       case 'reset-all':
         if (await confirmBox('Delete everything?', 'This removes all planners and scenarios from this browser. It cannot be undone.', 'Delete everything', true)) {
           var theme = db.theme; db = emptyDb(); db.theme = theme; ui.editor = null; save(); runCache.clear(); ui.tab = 'scenarios'; render();
@@ -1677,7 +1802,8 @@
   // Boot
   // =====================================================================
   load();
-  initSync();
+  if (SHARE) initShare(); else initSync();
+  window.addEventListener('hashchange', function () { if (/share=/.test(location.hash) !== !!SHARE || (SHARE && location.hash.indexOf(SHARE.id) < 0)) location.reload(); });
   if (!db.activePlannerId && db.planners.length) db.activePlannerId = db.planners[0].id;
   try { var t0 = sessionStorage.getItem('hbp.tab'); if (t0 && t0 !== 'editor') ui.tab = t0; } catch (e) { /* ignore */ }
   if (planner() && ui.tab === 'scenarios' && E.missingRequired(planner().base).length && !planner().scenarios.length) ui.tab = 'profile';

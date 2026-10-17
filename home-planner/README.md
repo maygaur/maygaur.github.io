@@ -40,6 +40,10 @@ Notes: a secret gist is unlisted, not private; anyone with its link can read it,
 6. **Zoom charts**: use − / + / Reset or the slider above any chart. On a computer, drag across the chart or Ctrl/⌘ + scroll to zoom, Shift + scroll to move, double-click to reset. On a phone, pinch to zoom, drag with two fingers to move, double-tap to reset. Zoom stays while you tweak inputs.
 7. **Data**: switch between multiple planners, rename/duplicate/delete them, export/import backup files, reset everything, and choose light/dark theme.
 
+## Share a read-only view
+
+Once GitHub sync is connected, **Data → Sync with GitHub → Share a read-only link** gives a link like `https://maygaur.github.io/home-planner/#share=<user>/<gist id>`. Anyone opening it sees the latest synced planners and can explore, tweak, create and compare scenarios. Their changes are kept only in their own browser (a separate storage slot) and are never written to the gist. No token is in the link; it works because a secret gist can be read by anyone who knows its id, so share it only with people you trust. New versions load automatically for viewers who have not changed anything; others get a "Load latest" prompt. To stop sharing, delete the gist on GitHub (your next sync creates a new one with a new link).
+
 ## What the model assumes
 
 - Monthly projection from the start month for the chosen number of years.
